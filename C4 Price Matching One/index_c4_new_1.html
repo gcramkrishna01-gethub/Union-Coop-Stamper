@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LPO Sales Order Stamper — Carrefour</title>
+<meta name="description" content="Upload Carrefour LPO PDFs and Excel sheet. Automatically matches ORDER numbers and stamps Sales Order numbers onto PDFs.">
+<meta property="og:title" content="LPO → Sales Order Stamper">
+<meta property="og:description" content="Match LPO numbers from Excel and stamp Sales Orders onto Carrefour PDFs automatically.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg:#0b0c10; --surface:#13141a; --card:#1c1d26; --border:#2c2d3f;
+  --accent:#4f6ef7; --accent2:#ff5c5c; --green:#00dfa2; --yellow:#ffd166;
+  --text:#e6e7f0; --muted:#63647f;
+  --mono:'DM Mono',monospace; --sans:'Syne',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(79,110,247,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(79,110,247,.035) 1px,transparent 1px);background-size:44px 44px;pointer-events:none;z-index:0}
+.blob{position:fixed;border-radius:50%;pointer-events:none;z-index:0;filter:blur(60px)}
+.b1{width:500px;height:500px;background:rgba(79,110,247,.10);top:-180px;left:-150px;animation:bm 9s ease-in-out infinite}
+.b2{width:350px;height:350px;background:rgba(0,223,162,.07);bottom:-100px;right:-80px;animation:bm 12s ease-in-out infinite reverse}
+@keyframes bm{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,25px) scale(1.05)}}
+
+.wrap{position:relative;z-index:1;max-width:920px;margin:0 auto;padding:44px 24px 100px}
+
+header{text-align:center;margin-bottom:48px}
+.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(79,110,247,.12);border:1px solid rgba(79,110,247,.28);color:var(--accent);font-family:var(--mono);font-size:11px;letter-spacing:.14em;padding:4px 14px;border-radius:20px;text-transform:uppercase;margin-bottom:18px}
+.badge::before{content:'●';font-size:8px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+h1{font-size:clamp(26px,5vw,44px);font-weight:800;letter-spacing:-.025em;line-height:1.1;margin-bottom:10px;background:linear-gradient(130deg,#fff 0%,#8895ff 45%,#00dfa2 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sub{color:var(--muted);font-size:13px;font-family:var(--mono)}
+
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 18px;margin-bottom:26px}
+.fs{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--muted);padding:3px 0;flex-shrink:0}
+.fn{width:19px;height:19px;border-radius:5px;background:rgba(79,110,247,.2);border:1px solid rgba(79,110,247,.3);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.fa{color:var(--border);font-size:14px;padding:0 6px}
+
+.ugrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+@media(max-width:600px){.ugrid{grid-template-columns:1fr}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;transition:border-color .25s}
+.card:hover{border-color:rgba(79,110,247,.35)}
+.ch{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.sb{width:26px;height:26px;border-radius:7px;background:rgba(79,110,247,.18);border:1px solid rgba(79,110,247,.35);color:var(--accent);font-family:var(--mono);font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ct{font-size:14px;font-weight:700;letter-spacing:-.01em}
+.cs{font-size:11px;color:var(--muted);font-family:var(--mono)}
+
+.dz{border:1.5px dashed var(--border);border-radius:10px;padding:18px 14px;text-align:center;cursor:pointer;transition:all .2s}
+.dz:hover,.dz.over{border-color:var(--accent);background:rgba(79,110,247,.04)}
+.dz input{display:none}
+.dz-i{font-size:26px;margin-bottom:6px;display:block}
+.dz-t{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.dz-t em{color:var(--accent);font-style:normal;text-decoration:underline}
+
+.fl{margin-top:10px;display:flex;flex-direction:column;gap:5px}
+.fi{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-family:var(--mono);font-size:11px}
+.fi .fn{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fi .fz{color:var(--muted)}
+.fi .fx{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;transition:color .15s}
+.fi .fx:hover{color:var(--accent2)}
+
+.pw{margin-top:12px;display:none}
+.pw.show{display:block}
+.pl{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-bottom:6px}
+.pt{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;background:var(--surface);border-radius:8px;overflow:hidden;border:1px solid var(--border)}
+.pt th{background:rgba(79,110,247,.1);color:var(--accent);padding:6px 10px;text-align:left;font-weight:500;border-bottom:1px solid var(--border)}
+.pt td{padding:5px 10px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04)}
+.pt tr:last-child td{border-bottom:none}
+.pt .sc{color:var(--green)}
+
+.cfg{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:18px}
+.cg{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:16px}
+@media(max-width:700px){.cg{grid-template-columns:1fr 1fr}}
+
+label{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.09em;text-transform:uppercase;margin-bottom:5px}
+input[type="number"],input[type="text"],select{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 10px;outline:none;transition:border-color .2s}
+input:focus,select:focus{border-color:var(--accent)}
+
+.btnrow{display:flex;gap:10px;margin-bottom:14px}
+.pbtn{flex:1;padding:15px;background:linear-gradient(135deg,var(--accent),#7a8bff);border:none;border-radius:12px;color:#fff;font-family:var(--sans);font-size:15px;font-weight:700;letter-spacing:-.01em;cursor:pointer;transition:opacity .2s,transform .15s}
+.pbtn:hover{opacity:.9}
+.pbtn:active{transform:scale(.99)}
+.pbtn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.cbtn{padding:15px 20px;background:transparent;border:1.5px solid var(--border);border-radius:12px;color:var(--muted);font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap;display:flex;align-items:center;gap:7px}
+.cbtn:hover{border-color:var(--accent2);color:var(--accent2);background:rgba(255,92,92,.06)}
+.cbtn:disabled{opacity:.3;cursor:not-allowed}
+
+.pbar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:14px;display:none}
+.pbar.show{display:block}
+.pf{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:2px;width:0%;transition:width .3s ease}
+
+.log{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--mono);font-size:11px;max-height:260px;overflow-y:auto;display:none;margin-bottom:14px;line-height:1.6}
+.log.show{display:block}
+.li{color:var(--muted)}
+.lok{color:var(--green)}
+.lw{color:var(--yellow)}
+.le{color:var(--accent2)}
+.lh{color:var(--accent);font-weight:500}
+
+.res{display:none}
+.res.show{display:block}
+
+/* ── Stat tab buttons ── */
+.stats{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.stat{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:12px 20px;
+  font-family:var(--mono);font-size:11px;
+  cursor:pointer;transition:all .2s;user-select:none;
+  display:flex;flex-direction:column;gap:2px;
+}
+.stat:hover{border-color:rgba(79,110,247,.5);background:rgba(79,110,247,.05)}
+.stat.active-all  {border-color:var(--accent);  background:rgba(79,110,247,.12)}
+.stat.active-ok   {border-color:var(--green);   background:rgba(0,223,162,.1)}
+.stat.active-miss {border-color:var(--yellow);  background:rgba(255,209,102,.08)}
+.stat-hint{font-size:10px;color:var(--muted);letter-spacing:.05em}
+.sv{font-size:24px;font-weight:800;font-family:var(--sans);display:block;line-height:1}
+.sv.g{color:var(--green)} .sv.y{color:var(--yellow)} .sv.b{color:var(--accent)}
+
+/* ── Result list header ── */
+.rh{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+.rt{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.rt span{color:var(--text);font-weight:600}
+.da{background:rgba(0,223,162,.12);color:var(--green);border:1px solid rgba(0,223,162,.25);border-radius:8px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s}
+.da:hover{background:rgba(0,223,162,.25)}
+.da:disabled{opacity:.35;cursor:not-allowed}
+
+/* ── Result rows ── */
+.ri{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:10px;padding:12px 16px;margin-bottom:8px;transition:border-color .2s}
+.ri.ok  {background:var(--card);border:1px solid rgba(0,223,162,.2)}
+.ri.miss{background:var(--card);border:1px solid rgba(255,209,102,.15)}
+.ri.ok:hover  {border-color:rgba(0,223,162,.45)}
+.ri.miss:hover{border-color:rgba(255,209,102,.35)}
+.rn{flex:1;font-family:var(--mono);font-size:12px;min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+.rl{font-family:var(--mono);font-size:11px;color:var(--yellow);background:rgba(255,209,102,.1);border:1px solid rgba(255,209,102,.2);padding:2px 8px;border-radius:5px;white-space:nowrap}
+.rs{font-family:var(--mono);font-size:11px;color:var(--green);background:rgba(0,223,162,.1);border:1px solid rgba(0,223,162,.2);padding:2px 8px;border-radius:5px;white-space:nowrap}
+.rm{font-family:var(--mono);font-size:11px;color:var(--accent2);background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.18);padding:2px 8px;border-radius:5px}
+.ri-btns{display:flex;gap:6px;flex-shrink:0}
+.db {background:var(--green);color:#000;border:none;border-radius:7px;padding:6px 13px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;transition:opacity .2s}
+.db:hover{opacity:.82}
+.vb {background:rgba(79,110,247,.18);color:var(--accent);border:1px solid rgba(79,110,247,.3);border-radius:7px;padding:6px 13px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s}
+.vb:hover{background:rgba(79,110,247,.3)}
+
+/* ── PDF Viewer Modal ── */
+.modal-bg{
+  display:none;position:fixed;inset:0;z-index:1000;
+  background:rgba(0,0,0,.75);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;padding:20px;
+}
+.modal-bg.open{display:flex}
+.modal{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:18px;width:100%;max-width:900px;
+  max-height:90vh;display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 30px 80px rgba(0,0,0,.6);
+}
+.modal-head{
+  display:flex;align-items:center;gap:12px;
+  padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.modal-title{flex:1;font-family:var(--mono);font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.modal-badges{display:flex;gap:6px;flex-shrink:0}
+.modal-close{background:rgba(255,92,92,.15);color:var(--accent2);border:1px solid rgba(255,92,92,.25);border-radius:8px;padding:5px 12px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;flex-shrink:0}
+.modal-close:hover{background:rgba(255,92,92,.3)}
+.modal-body{flex:1;overflow:hidden;background:#1a1a1a}
+.modal-body iframe{width:100%;height:100%;border:none;display:block}
+.modal-foot{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;gap:8px}
+.modal-info{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.modal-dl{background:var(--green);color:#000;border:none;border-radius:8px;padding:8px 18px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;transition:opacity .2s}
+.modal-dl:hover{opacity:.85}
+
+/* ── PDF upload preview thumbnails ── */
+.pdf-previews{margin-top:12px;display:none;flex-direction:column;gap:8px;max-height:282px;overflow-y:auto;overflow-x:hidden;padding-right:4px}
+.pdf-previews.show{display:flex}
+.pdf-prev-item{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;transition:border-color .2s}
+.pdf-prev-item:hover{border-color:rgba(79,110,247,.4)}
+.pdf-thumb-wrap{width:52px;height:68px;flex-shrink:0;border-radius:6px;overflow:hidden;background:#222;border:1px solid var(--border);position:relative;cursor:pointer}
+.pdf-thumb-wrap canvas{width:100%;height:100%;object-fit:cover;display:block}
+.pdf-thumb-wrap .thumb-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--muted)}
+.pdf-prev-info{flex:1;min-width:0}
+.pdf-prev-name{font-family:var(--mono);font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.pdf-prev-meta{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.pdf-prev-btns{display:flex;gap:5px;flex-shrink:0}
+.pdf-eye{background:rgba(79,110,247,.15);color:var(--accent);border:1px solid rgba(79,110,247,.3);border-radius:6px;padding:4px 10px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s}
+.pdf-eye:hover{background:rgba(79,110,247,.3)}
+.pdf-rm{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px 6px;transition:color .15s;border-radius:5px}
+.pdf-rm:hover{color:var(--accent2);background:rgba(255,92,92,.1)}
+.pdf-previews::-webkit-scrollbar{width:4px}
+.pdf-previews::-webkit-scrollbar-track{background:transparent}
+.pdf-previews::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.pdf-previews::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+<div class="blob b1"></div>
+<div class="blob b2"></div>
+
+<div class="wrap">
+  <header>
+    <div class="badge">Carrefour LPO Automation</div>
+    <h1>LPO → Sales Order Stamper</h1>
+    <p class="sub">Reads ORDER + Total Value from PDF · Validates vs Excel · Stamps SO · Separates mismatches</p>
+  </header>
+
+  <div class="flow">
+    <div class="fs"><div class="fn">1</div>Upload Excel (LPO + SO + Total)</div>
+    <div class="fa">→</div>
+    <div class="fs"><div class="fn">2</div>Upload Carrefour LPO PDFs</div>
+    <div class="fa">→</div>
+    <div class="fs"><div class="fn">3</div>Reads ORDER + Total Value</div>
+    <div class="fa">→</div>
+    <div class="fs"><div class="fn">4</div>Validates total → stamps SO</div>
+    <div class="fa">→</div>
+    <div class="fs"><div class="fn">5</div>Matched stamped · Unmatched ZIP</div>
+  </div>
+
+  <div class="ugrid">
+    <!-- Excel -->
+    <div class="card">
+      <div class="ch">
+        <div class="sb">01</div>
+        <div><div class="ct">Excel File</div><div class="cs">LPO number · Sales Order · Total Value</div></div>
+      </div>
+      <input type="file" id="xlIn" accept=".xlsx,.xls,.csv" style="display:none">
+      <div class="dz" id="xlDrop">
+        <span class="dz-i">📊</span>
+        <div class="dz-t">Drop here or <em onclick="document.getElementById('xlIn').click()">browse</em></div>
+        <div class="dz-t">.xlsx / .xls / .csv</div>
+      </div>
+      <div class="fl" id="xlList"></div>
+      <div class="pw" id="prevWrap">
+        <div class="pl">Preview — first 5 data rows</div>
+        <table class="pt" id="prevTbl"></table>
+      </div>
+    </div>
+
+    <!-- PDFs -->
+    <div class="card">
+      <div class="ch">
+        <div class="sb">02</div>
+        <div><div class="ct">PDF Files</div><div class="cs">Carrefour LPO documents</div></div>
+      </div>
+      <input type="file" id="pdfIn" accept=".pdf" multiple style="display:none">
+      <div class="dz" id="pdfDrop">
+        <span class="dz-i">📄</span>
+        <div class="dz-t">Drop here or <em onclick="document.getElementById('pdfIn').click()">browse</em></div>
+        <div class="dz-t">Multiple PDFs supported</div>
+      </div>
+      <div class="pdf-previews" id="pdfPreviews"></div>
+    </div>
+  </div>
+
+  <!-- Config -->
+  <div class="cfg">
+    <div class="ch" style="margin-bottom:0">
+      <div class="sb">03</div>
+      <div><div class="ct">Configuration</div><div class="cs">Excel columns &amp; stamp options</div></div>
+    </div>
+    <div class="cg">
+      <div>
+        <label>LPO Column (Excel)</label>
+        <input type="text" id="lpoCol" value="A" maxlength="3">
+      </div>
+      <div>
+        <label>Sales Order Column</label>
+        <input type="text" id="soCol" value="B" maxlength="3">
+      </div>
+      <div>
+        <label>Total Value Column</label>
+        <input type="text" id="totalCol" value="C" maxlength="3" title="Column with LPO total value to validate against PDF">
+      </div>
+      <div>
+        <label>Skip Header Rows</label>
+        <input type="number" id="skipRows" value="1" min="0" max="20">
+      </div>
+      <div>
+        <label>Font Size (0 = auto)</label>
+        <input type="number" id="fontSize" value="0" min="0" max="60" placeholder="0 = auto">
+      </div>
+      <div style="grid-column:span 2">
+        <label>Stamp Position in PDF</label>
+        <select id="stampPos">
+          <option value="auto" selected>Auto (centered between horizontal lines)</option>
+          <option value="top-right">Top Right</option>
+          <option value="top-left">Top Left</option>
+          <option value="bottom-right">Bottom Right</option>
+          <option value="bottom-left">Bottom Left</option>
+          <option value="center-top">Center Top</option>
+        </select>
+      </div>
+      <div style="grid-column:span 2">
+        <label>ORDER label text in PDF</label>
+        <input type="text" id="orderLabel" value="ORDER" placeholder="ORDER">
+      </div>
+    </div>
+    <!-- Total validation info box -->
+    <div style="margin-top:14px;background:rgba(79,110,247,.06);border:1px solid rgba(79,110,247,.2);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">
+      <span style="color:var(--accent);font-weight:500">📊 Total Value Matching:</span>
+      The app reads the PDF's <strong style="color:var(--text)">TOTAL B. TAX</strong> (last large number, bottom-right of final page) and compares it to your Excel Total column.
+      Decimals are ignored (integers must match). If totals differ → PDF goes to <strong style="color:var(--yellow)">Unmatched ZIP</strong>.
+    </div>
+  </div>
+
+  <div class="btnrow">
+    <button class="pbtn" id="procBtn" disabled onclick="run()">⚡ Extract · Match · Stamp PDFs</button>
+    <button class="cbtn" id="clearBtn" disabled onclick="clearAll()" title="Clear all uploaded files and results">🗑 Clear All</button>
+  </div>
+
+  <div class="pbar" id="pbar"><div class="pf" id="pfill"></div></div>
+  <div class="log"  id="logBox"></div>
+
+  <div class="res" id="resArea">
+    <!-- Clickable stat tabs -->
+    <div class="stats" id="statsBar"></div>
+
+    <!-- List header -->
+    <div class="rh">
+      <div class="rt" id="listLabel">Showing <span id="listCount">0</span> PDFs</div>
+      <button class="da" id="dlFilterBtn" onclick="dlFiltered()">⬇ Download as ZIP</button>
+    </div>
+    <div id="resItems"></div>
+  </div>
+
+  <!-- PDF Viewer Modal -->
+  <div class="modal-bg" id="pdfModal" onclick="closeModal(event)">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title" id="modalTitle">—</div>
+        <div class="modal-badges" id="modalBadges"></div>
+        <button class="modal-close" onclick="closeModalDirect()">✕ Close</button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <iframe id="modalFrame" src="about:blank"></iframe>
+      </div>
+      <div class="modal-foot">
+        <div class="modal-info" id="modalInfo"></div>
+        <button class="modal-dl" id="modalDlBtn" onclick="dlFromModal()">⬇ Download This PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── PDF.js worker ─────────────────────────────────────────────────
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── State ─────────────────────────────────────────────────────────
+let xlFile = null, pdfFiles = [], results = [];
+
+// ── Drag/drop & click ─────────────────────────────────────────────
+function setupDZ(dropId, inputId, cb) {
+  const z   = document.getElementById(dropId);
+  const inp = document.getElementById(inputId);
+
+  // Click anywhere on dropzone → open file picker
+  z.addEventListener('click', e => {
+    // Don't double-trigger if the em "browse" link was clicked
+    if (e.target.tagName !== 'EM') inp.click();
+  });
+
+  z.addEventListener('dragover',  e => { e.preventDefault(); z.classList.add('over'); });
+  z.addEventListener('dragleave', () => z.classList.remove('over'));
+  z.addEventListener('drop', e => {
+    e.preventDefault();
+    z.classList.remove('over');
+    cb(e.dataTransfer.files);
+  });
+
+  inp.addEventListener('change', e => { if (e.target.files.length) cb(e.target.files); });
+}
+
+setupDZ('xlDrop',  'xlIn',  f => loadXl(f));
+setupDZ('pdfDrop', 'pdfIn', f => loadPdfs(f));
+
+function loadXl(files) {
+  const f = [...files].find(f => /\.(xlsx|xls|csv)$/i.test(f.name));
+  if (!f) return alert('Please select an Excel or CSV file.');
+  xlFile = f;
+  renderList('xlList', [xlFile], 'xl');
+  previewExcel();
+  check();
+}
+function loadPdfs(files) {
+  const ps = [...files].filter(f => /\.pdf$/i.test(f.name));
+  if (!ps.length) return alert('Please select PDF files.');
+  pdfFiles = [...pdfFiles, ...ps];
+  renderPdfPreviews();
+  check();
+}
+
+// ── Render PDF upload thumbnails ───────────────────────────────────
+function renderPdfPreviews() {
+  const wrap = document.getElementById('pdfPreviews');
+  if (!pdfFiles.length) { wrap.classList.remove('show'); wrap.innerHTML=''; return; }
+  wrap.classList.add('show');
+  wrap.innerHTML = pdfFiles.map((f,i) => `
+    <div class="pdf-prev-item" id="ppitem-${i}">
+      <div class="pdf-thumb-wrap" onclick="previewPdfInModal(${i})" title="Click to preview">
+        <div class="thumb-loading" id="thumb-loading-${i}">⏳</div>
+        <canvas id="thumb-canvas-${i}" style="display:none"></canvas>
+      </div>
+      <div class="pdf-prev-info">
+        <div class="pdf-prev-name" title="${f.name}">${f.name}</div>
+        <div class="pdf-prev-meta" id="thumb-meta-${i}">${(f.size/1024).toFixed(1)} KB · loading…</div>
+      </div>
+      <div class="pdf-prev-btns">
+        <button class="pdf-eye" onclick="previewPdfInModal(${i})">👁 Preview</button>
+        <button class="pdf-rm"  onclick="rmPdf(${i})" title="Remove">✕</button>
+      </div>
+    </div>`).join('');
+
+  // Render thumbnails async for each PDF
+  pdfFiles.forEach((f, i) => renderThumb(f, i));
+}
+
+async function renderThumb(file, i) {
+  try {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 0.3 });
+
+    const canvas = document.getElementById(`thumb-canvas-${i}`);
+    const loading = document.getElementById(`thumb-loading-${i}`);
+    if (!canvas) return;
+
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+    canvas.style.display = 'block';
+    if (loading) loading.style.display = 'none';
+
+    const metaEl = document.getElementById(`thumb-meta-${i}`);
+    if (metaEl) metaEl.textContent = `${(file.size/1024).toFixed(1)} KB · ${pdf.numPages} page${pdf.numPages>1?'s':''}`;
+  } catch(e) {
+    const loading = document.getElementById(`thumb-loading-${i}`);
+    if (loading) loading.textContent = '📄';
+    const metaEl = document.getElementById(`thumb-meta-${i}`);
+    if (metaEl) metaEl.textContent = `${(file.size/1024).toFixed(1)} KB`;
+  }
+}
+
+// ── Quick-preview an uploaded (unstamped) PDF in the modal ─────────
+async function previewPdfInModal(i) {
+  const f = pdfFiles[i];
+  if (!f) return;
+
+  if (modalBlobUrl) { URL.revokeObjectURL(modalBlobUrl); modalBlobUrl = null; }
+
+  const buf  = await f.arrayBuffer();
+  const blob = new Blob([new Uint8Array(buf)], {type:'application/pdf'});
+  modalBlobUrl = URL.createObjectURL(blob);
+  modalResultIdx = -1; // not a stamped result
+
+  document.getElementById('modalTitle').textContent = f.name;
+  document.getElementById('modalBadges').innerHTML  = `<span class="rl">Uploaded · Unstamped</span>`;
+  document.getElementById('modalInfo').textContent  = `${(f.size/1024).toFixed(1)} KB · preview only`;
+  document.getElementById('modalDlBtn').style.display = 'none';
+  document.getElementById('modalFrame').src = modalBlobUrl;
+  document.getElementById('pdfModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function rmPdf(i) {
+  pdfFiles.splice(i, 1);
+  renderPdfPreviews();
+  check();
+}
+function renderList(id, files, type) {
+  document.getElementById(id).innerHTML = files.map((f,i) => `
+    <div class="fi">
+      <span>${type==='xl'?'📊':'📄'}</span>
+      <span class="fn">${f.name}</span>
+      <span class="fz">${(f.size/1024).toFixed(1)}KB</span>
+      <button class="fx" onclick="rmFile('${type}',${i})">✕</button>
+    </div>`).join('');
+}
+function rmFile(type, i) {
+  if (type==='xl') {
+    xlFile=null;
+    document.getElementById('xlList').innerHTML='';
+    document.getElementById('prevWrap').classList.remove('show');
+  }
+  check();
+}
+function check() {
+  const hasFiles = !!(xlFile || pdfFiles.length);
+  document.getElementById('procBtn').disabled = !(xlFile && pdfFiles.length);
+  document.getElementById('clearBtn').disabled = !hasFiles;
+}
+
+function clearAll() {
+  xlFile = null;
+  pdfFiles = [];
+  results = [];
+  modalResultIdx = -1;
+
+  document.getElementById('xlIn').value  = '';
+  document.getElementById('pdfIn').value = '';
+
+  document.getElementById('xlList').innerHTML  = '';
+  document.getElementById('prevTbl').innerHTML = '';
+  document.getElementById('prevWrap').classList.remove('show');
+
+  // Clear PDF previews
+  const pp = document.getElementById('pdfPreviews');
+  pp.innerHTML = ''; pp.classList.remove('show');
+
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('logBox').classList.remove('show');
+  document.getElementById('pbar').classList.remove('show');
+  document.getElementById('pfill').style.width = '0%';
+
+  document.getElementById('resArea').classList.remove('show');
+  document.getElementById('statsBar').innerHTML = '';
+  document.getElementById('resItems').innerHTML = '';
+
+  check();
+}
+
+// ── Excel preview ─────────────────────────────────────────────────
+function previewExcel() {
+  if (!xlFile) return;
+  const r = new FileReader();
+  r.onload = e => {
+    const wb = XLSX.read(e.target.result,{type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    const li   = ci(document.getElementById('lpoCol').value||'A');
+    const si   = ci(document.getElementById('soCol').value||'B');
+    const ti   = ci(document.getElementById('totalCol').value||'C');
+    const skip = parseInt(document.getElementById('skipRows').value)||1;
+    const lc   = document.getElementById('lpoCol').value.toUpperCase();
+    const sc   = document.getElementById('soCol').value.toUpperCase();
+    const tc   = document.getElementById('totalCol').value.toUpperCase();
+    let html = `<thead><tr><th>LPO (Col ${lc})</th><th>Sales Order (Col ${sc})</th><th>Total Value (Col ${tc})</th></tr></thead><tbody>`;
+    for (let row=skip; row<Math.min(data.length,skip+6); row++) {
+      html += `<tr><td>${data[row][li]||''}</td><td class="sc">${data[row][si]||''}</td><td style="color:var(--yellow)">${data[row][ti]||''}</td></tr>`;
+    }
+    html += '</tbody>';
+    document.getElementById('prevTbl').innerHTML = html;
+    document.getElementById('prevWrap').classList.add('show');
+  };
+  r.readAsArrayBuffer(xlFile);
+}
+['lpoCol','soCol','totalCol','skipRows'].forEach(id => document.getElementById(id).addEventListener('change', previewExcel));
+
+// ── Helpers ───────────────────────────────────────────────────────
+function ci(letter) {
+  letter = (letter||'A').toUpperCase().trim();
+  let n=0; for(let i=0;i<letter.length;i++) n=n*26+(letter.charCodeAt(i)-64);
+  return n-1;
+}
+
+// ── Logging ───────────────────────────────────────────────────────
+function log(msg, cls='li') {
+  const b = document.getElementById('logBox');
+  b.classList.add('show');
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = `[${new Date().toLocaleTimeString('en-US',{hour12:false})}] ${msg}`;
+  b.appendChild(d);
+  b.scrollTop = b.scrollHeight;
+}
+function prog(p) { document.getElementById('pbar').classList.add('show'); document.getElementById('pfill').style.width=p+'%'; }
+
+// ── Parse Excel → {lpo: {so, total}} map ─────────────────────────
+function parseExcel() {
+  return new Promise((res,rej) => {
+    const r = new FileReader();
+    r.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result,{type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        const li   = ci(document.getElementById('lpoCol').value||'A');
+        const si   = ci(document.getElementById('soCol').value||'B');
+        const ti   = ci(document.getElementById('totalCol').value||'C');
+        const skip = parseInt(document.getElementById('skipRows').value)||1;
+        const map  = {};
+        for (let row=skip; row<data.length; row++) {
+          const lpo   = String(data[row][li]||'').trim();
+          const so    = String(data[row][si]||'').trim();
+          const total = String(data[row][ti]||'').trim();
+          if (lpo) map[lpo] = { so, total };
+        }
+        log(`Excel loaded: ${Object.keys(map).length} LPO entries (with Total Value column)`, 'lok');
+        res(map);
+      } catch(err) { rej(err); }
+    };
+    r.readAsArrayBuffer(xlFile);
+  });
+}
+
+// ── Extract Total Value from PDF — TOTAL B. TAX column anchor ────────
+// Carrefour LPO format:
+//   The table header row contains "TOTAL B. TAX" at a specific X position.
+//   The grand total number sits in the summary row BELOW all line items,
+//   at the SAME X position as that column header.
+//   We find the header X, then look for the number directly below it in the
+//   lowest (summary) row of the table.
+function extractPdfTotal(pages) {
+
+  // Search LAST page first, then work backwards (multi-page: total is on last page)
+  for (let pi = pages.length - 1; pi >= 0; pi--) {
+    const { items } = pages[pi];
+    if (!items || !items.length) continue;
+
+    // ── Step 1: Find "TOTAL B. TAX" header X position ──────────────
+    // Also accept: "TOTAL B TAX", "TOTAL B.TAX", "TOTALB.TAX", "TOTAL A. TAX"
+    let totalColX     = null;
+    let totalColWidth = 60; // default tolerance window
+    let headerY       = null;
+
+    for (const it of items) {
+      const s = it.str.replace(/\s+/g, ' ').trim().toUpperCase();
+      if (
+        s === 'TOTAL B. TAX' || s === 'TOTAL B.TAX' ||
+        s === 'TOTAL B TAX'  || s === 'TOTALB.TAX'  ||
+        s === 'TOTAL A. TAX' || s === 'TOTAL A.TAX' ||
+        s.startsWith('TOTAL B') || s.startsWith('TOTAL A')
+      ) {
+        totalColX     = it.x;
+        totalColWidth = Math.max(it.width || 60, 60);
+        headerY       = it.y;
+        log(`  Found "${it.str}" header at x=${it.x.toFixed(1)}, y=${it.y.toFixed(1)}`, 'li');
+        break;
+      }
+    }
+
+    // ── Step 1b: If header not found as one token, try pairs of adjacent items ──
+    if (totalColX === null) {
+      for (let i = 0; i < items.length - 1; i++) {
+        const combined = (items[i].str + ' ' + items[i+1].str).replace(/\s+/g,' ').trim().toUpperCase();
+        if (combined.startsWith('TOTAL B') || combined.startsWith('TOTAL A')) {
+          totalColX     = items[i].x;
+          totalColWidth = Math.max((items[i+1].x + (items[i+1].width||0)) - items[i].x, 60);
+          headerY       = items[i].y;
+          log(`  Found paired header "${combined}" at x=${items[i].x.toFixed(1)}`, 'li');
+          break;
+        }
+      }
+    }
+
+    if (totalColX !== null) {
+      // ── Step 2: Find all numbers in the TOTAL B. TAX column ────────
+      // Column X range: [totalColX - tolerance, totalColX + totalColWidth + tolerance]
+      const tolerance = 20;
+      const colXMin   = totalColX - tolerance;
+      const colXMax   = totalColX + totalColWidth + tolerance;
+
+      // Only look BELOW the header row (lower Y in PDF = lower on page)
+      const colNums = items
+        .filter(it => {
+          if (it.y >= (headerY - 2)) return false;    // must be below header
+          if (it.x < colXMin || it.x > colXMax) return false; // must be in column X range
+          const clean = it.str.replace(/,/g,'').trim();
+          if (!/^\d[\d]*\.?\d*$/.test(clean)) return false;   // must be a number
+          const num = parseFloat(clean);
+          return !isNaN(num) && num >= 0;
+        })
+        .map(it => ({ ...it, num: parseFloat(it.str.replace(/,/g,'')) }));
+
+      if (colNums.length > 0) {
+        // The GRAND TOTAL is the number with the LOWEST Y value in this column
+        // (lowest Y = bottom-most = summary row = last row of the table)
+        colNums.sort((a, b) => a.y - b.y);
+        const grandTotal = colNums[0];
+        log(`  TOTAL B. TAX grand total: "${grandTotal.str}" at y=${grandTotal.y.toFixed(1)}`, 'lok');
+        return { total: grandTotal.num, raw: grandTotal.str };
+      }
+    }
+
+    // ── Step 3: Fallback — "TOTAL B. TAX" not found as header ──────
+    // Look for last decimal number that appears in the RIGHT-CENTER of the page
+    // (between 45%–85% of page width) on the summary row
+    const pageH = Math.max(...items.map(it => it.y || 0), 800);
+    const pageW = Math.max(...items.map(it => (it.x || 0) + (it.width || 0)), 600);
+
+    // Find the Y of the summary row: the row that has numbers but NO text letters,
+    // typically the very last numeric row before the footer/notes
+    // We group items by Y (rounded to nearest 3pts) to find rows
+    const rowMap = {};
+    for (const it of items) {
+      const rowY = Math.round(it.y / 3) * 3;
+      if (!rowMap[rowY]) rowMap[rowY] = [];
+      rowMap[rowY].push(it);
+    }
+
+    // Find rows that contain ONLY numbers (the summary row)
+    const numericRows = Object.entries(rowMap)
+      .filter(([,rowItems]) => {
+        const hasNum  = rowItems.some(it => /\d/.test(it.str));
+        const hasText = rowItems.some(it => /[A-Za-z]/.test(it.str));
+        return hasNum && !hasText;
+      })
+      .map(([y]) => parseFloat(y))
+      .sort((a,b) => a - b); // ascending Y = bottom of page first
+
+    if (numericRows.length > 0) {
+      // Take the LOWEST numeric-only row (the summary/total row)
+      const summaryRowY = numericRows[0];
+      const summaryItems = items.filter(it => Math.abs(it.y - summaryRowY) < 5);
+
+      // Among summary row items, take the RIGHTMOST large number (TOTAL B. TAX position)
+      const summaryNums = summaryItems
+        .filter(it => {
+          const clean = it.str.replace(/,/g,'').trim();
+          if (!/^\d[\d]*\.?\d*$/.test(clean)) return false;
+          const num = parseFloat(clean);
+          return !isNaN(num) && num >= 0;
+        })
+        .map(it => ({ ...it, num: parseFloat(it.str.replace(/,/g,'')) }))
+        .filter(it => it.x > pageW * 0.40); // right portion only
+
+      if (summaryNums.length > 0) {
+        // Rightmost number in the right portion = TOTAL B. TAX
+        summaryNums.sort((a, b) => b.x - a.x);
+        const grandTotal = summaryNums[0];
+        log(`  Fallback grand total (rightmost summary): "${grandTotal.str}" at x=${grandTotal.x.toFixed(1)}`, 'lok');
+        return { total: grandTotal.num, raw: grandTotal.str };
+      }
+    }
+  }
+
+  // ── Final fallback: last decimal number on last page ────────────
+  const lastPage = pages[pages.length - 1];
+  if (lastPage) {
+    const allNums = [...lastPage.full.matchAll(/\b(\d{2,}[,\d]*\.\d{2,3})\b/g)];
+    if (allNums.length > 0) {
+      const lastNum = allNums[allNums.length - 1];
+      const val = parseFloat(lastNum[1].replace(/,/g,''));
+      if (val > 0) return { total: val, raw: lastNum[1] };
+    }
+  }
+
+  return null; // could not extract
+}
+
+// ── Compare totals — decimals ignored, integer parts must match ───────
+function totalsMatch(pdfTotal, excelTotalStr) {
+  if (!excelTotalStr || String(excelTotalStr).trim() === '') return true; // no excel total = skip check
+  const excelNum = parseFloat(String(excelTotalStr).replace(/[,\s]/g, ''));
+  if (isNaN(excelNum) || isNaN(pdfTotal)) return true; // parse failure = skip check
+  // Compare integer parts only (Math.floor both — decimals ignored as requested)
+  return Math.floor(pdfTotal) === Math.floor(excelNum);
+}
+
+// ── Find ORDER number + position of big center LPO number ─────────
+// Returns { orderNum, lpoNumY, lpoNumX, lpoNumSize, pageIdx }
+// The "ORDER" field value is what we match against Excel.
+// The big center number is where we stamp the SO.
+async function analyzePages(buffer, labelText) {
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const label = (labelText||'ORDER').toUpperCase();
+  const pages = [];
+
+  for (let p=1; p<=pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc   = await page.getTextContent();
+    // Keep full transform for font-size estimation
+    const items = tc.items.map(it => ({
+      str:      it.str.trim(),
+      x:        it.transform[4],
+      y:        it.transform[5],
+      fontSize: Math.abs(it.transform[0]) || Math.abs(it.transform[3]) || 12,
+      width:    it.width || 0,
+    }));
+    const full = items.map(it=>it.str).join(' ');
+    pages.push({ full, items, pageNum: p });
+  }
+
+  // ── Step 1: find LPO/ORDER number — supports BOTH Carrefour & LULU ─
+  let orderNum = null;
+  let vendor   = null; // 'carrefour' | 'lulu' | 'unknown'
+
+  for (const { full, items } of pages) {
+
+    // ── LULU: "Purchase Order #" or "Purchase Order#" followed by the number ──
+    // In your screenshot it appears as: "Purchase Order # :" then "4880783539"
+    for (let i = 0; i < items.length; i++) {
+      const t = items[i].str.toUpperCase().replace(/\s+/g,'');
+      if (t.includes('PURCHASEORDER') && (t.includes('#') || t.includes('NO'))) {
+        // Value may be in same item or next items
+        const rest = items[i].str.replace(/purchase order\s*#?\s*:?\s*/i,'').trim();
+        if (rest && /\d{5,}/.test(rest)) {
+          orderNum = rest.match(/\d[\d\-]{4,}/)[0];
+          vendor = 'lulu';
+          log(`  LULU Purchase Order # found inline: "${orderNum}"`, 'lok');
+          break;
+        }
+        // Look ahead up to 6 items
+        for (let j = i+1; j < Math.min(i+7, items.length); j++) {
+          const cand = items[j].str.replace(/^[:#\s]+/,'').trim();
+          if (/^\d{5,}$/.test(cand)) {
+            orderNum = cand;
+            vendor = 'lulu';
+            log(`  LULU Purchase Order # found ahead: "${orderNum}"`, 'lok');
+            break;
+          }
+        }
+        if (orderNum) break;
+      }
+    }
+    if (orderNum) break;
+
+    // ── LULU regex fallback: "Purchase Order # : 4880783539" ──
+    const luluMatch = full.match(/purchase\s+order\s*#?\s*[:\s]+(\d{5,})/i);
+    if (luluMatch) {
+      orderNum = luluMatch[1].trim();
+      vendor = 'lulu';
+      log(`  LULU Purchase Order # (regex): "${orderNum}"`, 'lok');
+      break;
+    }
+
+    // ── CARREFOUR: configured label (default "ORDER") ──────────────
+    for (let i = 0; i < items.length; i++) {
+      const t = items[i].str.toUpperCase();
+      if (t === label || t.startsWith(label)) {
+        const rest = items[i].str.slice(label.length).replace(/^[:\s]+/,'').trim();
+        if (rest && /\d{4,}/.test(rest)) { orderNum = rest; vendor='carrefour'; break; }
+        for (let j=i+1; j<Math.min(i+6,items.length); j++) {
+          const cand = items[j].str.replace(/^[:\s]+/,'').trim();
+          if (cand && /[A-Z0-9\-]{4,}/.test(cand) && /\d/.test(cand)) {
+            orderNum = cand; vendor='carrefour'; break;
+          }
+        }
+        if (orderNum) break;
+      }
+    }
+    if (orderNum) break;
+
+    // ── Generic regex fallbacks ────────────────────────────────────
+    const patterns = [
+      new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*[:\\s]*([A-Z0-9][A-Z0-9\\-]{4,25})','i'),
+      /\b(\d{3,6}-\d{6,12})\b/,
+      /ORDER\s*[:\s]+([A-Z0-9][A-Z0-9\-]{4,25})/i,
+    ];
+    for (const pat of patterns) {
+      const m = full.match(pat);
+      if (m) { const n=(m[1]||m[0]).trim(); if(/\d/.test(n)){orderNum=n; vendor='unknown'; break;} }
+    }
+    if (orderNum) break;
+  }
+
+  if (orderNum) log(`  LPO number: "${orderNum}" (vendor: ${vendor||'unknown'})`, 'lok');
+  else          log(`  ⚠ LPO number not found in PDF`, 'lw');
+
+  // ── Step 2: find DEADLINE row (Carrefour) ────────────────────────
+  let deadlineItem  = null;
+  let deadlineValue = null;
+  for (const { items } of pages) {
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].str.toUpperCase().includes('DEADLINE')) {
+        deadlineItem = items[i];
+        const dy = deadlineItem.y;
+        for (let j=i+1; j<Math.min(i+8,items.length); j++) {
+          if (Math.abs(items[j].y - dy) < 4 && items[j].str.length > 0) {
+            deadlineValue = items[j]; break;
+          }
+        }
+        log(`  DEADLINE at y=${deadlineItem.y.toFixed(1)}`, 'li');
+        break;
+      }
+    }
+    if (deadlineItem) break;
+  }
+
+  // ── Step 3: find TOP boundary of stamp zone ───────────────────────
+  // Carrefour: TERMS / SPECIAL CONDITIONS row
+  // LULU:      "NOTE:" or "Tax ID" or "Comments:" row (last text before blank zone)
+  let termsItem = null;
+  for (const { items } of pages) {
+    for (const it of items) {
+      const s = it.str.toUpperCase().trim();
+      const isCarrefourTop = s === 'TERMS:' || s === 'TERMS' || s.startsWith('SPECIAL COND') || s === 'SLIM4 LPO';
+      const isLuluTop      = s.startsWith('NOTE:') || s.startsWith('NOTE') ||
+                             s.startsWith('TAX ID') || s.startsWith('COMMENTS:') ||
+                             s.startsWith('**PAYMENT') || s.startsWith('*PLEASE');
+      if (isCarrefourTop || isLuluTop) {
+        // Pick the LOWEST y (furthest down the page) among all candidates
+        if (!termsItem || it.y < termsItem.y) termsItem = it;
+      }
+    }
+  }
+  if (termsItem) log(`  Zone top anchor at y=${termsItem.y.toFixed(1)} → "${termsItem.str.slice(0,40)}"`, 'li');
+  else           log(`  ⚠ Zone top anchor not found`, 'lw');
+
+  // ── Step 4: find BOTTOM boundary of stamp zone ────────────────────
+  // Carrefour: BAR CODE / QTY / SUPPLIER REF table header
+  // LULU:      "Signed By" line at the bottom
+  let tableHeaderItem = null;
+  const TOP_KEYWORDS    = ['BAR CODE','BARCODE','QTY','SUPPLIER REF','ITEM DESCRIPTION','FAM.','P.PRI',
+                           'SIGNED BY','AUTHORISED BY','RELEASED BY'];
+  for (const { items } of pages) {
+    for (const it of items) {
+      const s = it.str.toUpperCase().trim();
+      if (TOP_KEYWORDS.some(k => s.includes(k))) {
+        if (termsItem && it.y < termsItem.y) {
+          if (!tableHeaderItem || it.y > tableHeaderItem.y) tableHeaderItem = it;
+        } else if (!termsItem) {
+          if (!tableHeaderItem || it.y > tableHeaderItem.y) tableHeaderItem = it;
+        }
+      }
+    }
+  }
+  if (tableHeaderItem) log(`  Zone bottom anchor at y=${tableHeaderItem.y.toFixed(1)} → "${tableHeaderItem.str.slice(0,40)}"`, 'li');
+  else                 log(`  ⚠ Zone bottom anchor not found`, 'lw');
+
+  // ── Step 5: find BIG center LPO number (largest all-digit item) ───
+  let bigItem = null;
+  for (const { items } of pages) {
+    for (const it of items) {
+      if (!/^\d{6,}$/.test(it.str)) continue;
+      if (!bigItem || it.fontSize > bigItem.fontSize) bigItem = it;
+    }
+  }
+  if (bigItem) log(`  Big number: "${bigItem.str}" fontSize≈${bigItem.fontSize.toFixed(1)}`, 'li');
+
+  // ── Step 6: find "PURCHASE ORDER" heading position (LULU) ─────────
+  // We'll stamp the SO number right after it on the same line
+  let purchaseOrderItem = null;
+  for (const { items } of pages) {
+    for (const it of items) {
+      if (it.str.toUpperCase().trim() === 'PURCHASE ORDER') {
+        purchaseOrderItem = it;
+        log(`  "PURCHASE ORDER" heading at x=${it.x.toFixed(1)}, y=${it.y.toFixed(1)}, w=${it.width.toFixed(1)}`, 'li');
+        break;
+      }
+    }
+    if (purchaseOrderItem) break;
+  }
+
+  return { orderNum, vendor, deadlineItem, deadlineValue, termsItem, tableHeaderItem, bigItem, purchaseOrderItem, pages };
+}
+
+// ── Stamp SO — LULU: number only next to PURCHASE ORDER heading
+//              Carrefour: "Sales Order: X" centered in blank zone ──
+async function stampSO(buffer, soNumber, vendor, deadlineItem, deadlineValue, termsItem, tableHeaderItem, bigItem, purchaseOrderItem) {
+  const { PDFDocument, rgb, StandardFonts } = PDFLib;
+  const doc  = await PDFDocument.load(buffer);
+  const font = await doc.embedFont(StandardFonts.HelveticaBold);
+
+  const cfgFs = parseInt(document.getElementById('fontSize').value) || 0;
+  const pos   = document.getElementById('stampPos').value;
+
+  // Stamp FIRST PAGE ONLY
+  const pages = doc.getPages();
+  const page  = pages[0];
+  {
+    const { width, height } = page.getSize();
+    let x, y, fs, label;
+
+    // ════════════════════════════════════════════════════════════════
+    // LULU MODE — stamp JUST the SO number right after "PURCHASE ORDER"
+    // ════════════════════════════════════════════════════════════════
+    if (vendor === 'lulu' && pos === 'auto') {
+      label = `${soNumber}`;   // just the number, no prefix
+      fs = cfgFs || 0;
+
+      if (purchaseOrderItem) {
+        // Match the font size of "PURCHASE ORDER" heading
+        const poFs = purchaseOrderItem.fontSize || 14;
+        fs = cfgFs || Math.round(poFs);
+
+        const tw = font.widthOfTextAtSize(label, fs);
+
+        // Place it to the RIGHT of "PURCHASE ORDER" text, same baseline
+        // Add a small gap (10pt) between the heading and the number
+        x = purchaseOrderItem.x + purchaseOrderItem.width + 10;
+        y = purchaseOrderItem.y;
+
+        // Clamp so it doesn't go off-page
+        if (x + tw > width - 10) {
+          // If no space to the right, place it on next line below
+          x = purchaseOrderItem.x;
+          y = purchaseOrderItem.y - fs - 4;
+        }
+
+        log(`  LULU stamp: "${label}" at x=${x.toFixed(1)}, y=${y.toFixed(1)}, fs=${fs}pt (next to PURCHASE ORDER)`, 'li');
+
+      } else {
+        // Fallback: top-center of page
+        fs = cfgFs || 16;
+        const tw = font.widthOfTextAtSize(label, fs);
+        x = (width - tw) / 2;
+        y = height - fs - 20;
+        log(`  LULU stamp fallback: top-center`, 'li');
+      }
+
+      // Plain bold black — no box, no background
+      page.drawText(label, { x, y, size: fs, font, color: rgb(0, 0, 0) });
+
+    // ════════════════════════════════════════════════════════════════
+    // CARREFOUR MODE — "Sales Order: X" centered in blank zone
+    // ════════════════════════════════════════════════════════════════
+    } else if (pos === 'auto') {
+      label = `Sales Order: ${soNumber}`;
+
+      const zoneTop    = termsItem       ? termsItem.y - 4       : (deadlineItem ? deadlineItem.y - 40 : height * 0.45);
+      const zoneBottom = tableHeaderItem ? tableHeaderItem.y + 4 : zoneTop - 80;
+      const zoneHeight = Math.abs(zoneTop - zoneBottom);
+
+      const autoFs = Math.min(Math.max(Math.floor(zoneHeight * 0.50), 14), 40);
+      fs = cfgFs || autoFs;
+
+      const tw = font.widthOfTextAtSize(label, fs);
+      x = (width - tw) / 2;
+      x = Math.max(10, Math.min(x, width - tw - 10));
+      y = zoneBottom + (zoneHeight - fs) / 2;
+      y = Math.max(10, y);
+
+      log(`  C4 stamp: zone top=${zoneTop.toFixed(1)}, bottom=${zoneBottom.toFixed(1)}, fs=${fs}pt`, 'li');
+
+      page.drawText(label, { x, y, size: fs, font, color: rgb(0, 0, 0) });
+
+    // ════════════════════════════════════════════════════════════════
+    // MANUAL POSITION (dropdown override — works for both vendors)
+    // ════════════════════════════════════════════════════════════════
+    } else {
+      label = vendor === 'lulu' ? `${soNumber}` : `Sales Order: ${soNumber}`;
+      fs = cfgFs || 18;
+      const tw = font.widthOfTextAtSize(label, fs);
+      const mg = 18;
+      switch (pos) {
+        case 'top-right':    x = width - tw - mg; y = height - fs - mg; break;
+        case 'top-left':     x = mg;              y = height - fs - mg; break;
+        case 'bottom-right': x = width - tw - mg; y = mg;               break;
+        case 'bottom-left':  x = mg;              y = mg;               break;
+        case 'center-top':   x = (width - tw)/2;  y = height - fs - mg; break;
+        default:             x = width - tw - mg; y = height - fs - mg;
+      }
+      page.drawText(label, { x, y, size: fs, font, color: rgb(0, 0, 0) });
+    }
+  }
+
+  return await doc.save();
+}
+
+// ── Main ──────────────────────────────────────────────────────────
+async function run() {
+  const btn = document.getElementById('procBtn');
+  btn.disabled = true; btn.textContent = '⏳ Processing…';
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('resArea').classList.remove('show');
+  results = [];
+
+  try {
+    log('── Starting ──', 'lh'); prog(5);
+
+    // Parse Excel
+    log(`Reading: ${xlFile.name}`, 'li');
+    const lpoMap = await parseExcel();
+    prog(15);
+
+    const step = 80 / pdfFiles.length;
+    let stamped=0, noMatch=0;
+    const label = document.getElementById('orderLabel').value || 'ORDER';
+
+    for (let i=0; i<pdfFiles.length; i++) {
+      const f = pdfFiles[i];
+      log(`\n── PDF ${i+1}/${pdfFiles.length}: ${f.name}`, 'lh');
+
+      // Read file
+      const buf = await f.arrayBuffer();
+      const bufU8 = new Uint8Array(buf); // keep a stable copy for unmatched ZIP
+
+      // Analyze PDF — extract text + find ORDER field + locate big center LPO number
+      log('  Analyzing PDF…', 'li');
+      let analysis;
+      try {
+        analysis = await analyzePages(buf.slice(0), label);
+      } catch(ex) {
+        log(`  Analysis error: ${ex.message}`, 'le');
+        results.push({name:f.name, buf:bufU8, origFile:f, orderNum:null, soNum:null, ok:false}); noMatch++;
+        prog(15+(i+1)*step); continue;
+      }
+
+      const { orderNum, vendor, deadlineItem, deadlineValue, termsItem, tableHeaderItem, bigItem, purchaseOrderItem, pages } = analysis;
+      log(`  Pages: ${pages.length} · Vendor: ${vendor||'unknown'}`, 'li');
+
+      if (!orderNum) {
+        log(`  ⚠ ORDER number not found in PDF`, 'lw');
+        log(`  Tip: check the "ORDER label text" field matches what's in your PDF`, 'li');
+        results.push({name:f.name, buf:bufU8, origFile:f, orderNum:null, soNum:null, ok:false, reason:'no_order'}); noMatch++;
+        prog(15+(i+1)*step); continue;
+      }
+
+      // Match against Excel — exact first, then normalized (strip dashes/spaces)
+      let entry = lpoMap[orderNum];
+      if (!entry) {
+        const clean = s => s.replace(/[\s\-\.\/]/g,'').toUpperCase();
+        const co  = clean(orderNum);
+        const key = Object.keys(lpoMap).find(k => clean(k)===co);
+        if (key) { entry = lpoMap[key]; log(`  Matched (normalized) → key: "${key}"`, 'lok'); }
+      }
+
+      if (!entry || !entry.so) {
+        log(`  ⚠ "${orderNum}" not found in Excel column ${document.getElementById('lpoCol').value.toUpperCase()}`, 'lw');
+        const sample = Object.keys(lpoMap).slice(0,4).join(', ');
+        log(`  Excel sample: ${sample}`, 'li');
+        results.push({name:f.name, buf:bufU8, origFile:f, orderNum, soNum:null, ok:false, reason:'no_excel_match'}); noMatch++;
+        prog(15+(i+1)*step); continue;
+      }
+
+      const soNum      = entry.so;
+      const excelTotal = entry.total;
+
+      log(`  ✓ Excel match! Sales Order: "${soNum}" | Excel Total: "${excelTotal}"`, 'lok');
+
+      // ── Extract PDF total value ──
+      const pdfTotalResult = extractPdfTotal(pages);
+      let pdfTotal = null;
+      if (pdfTotalResult) {
+        pdfTotal = pdfTotalResult.total;
+        log(`  PDF Total Value: ${pdfTotalResult.raw} (parsed: ${pdfTotal})`, 'li');
+      } else {
+        log(`  ⚠ Could not extract Total Value from PDF`, 'lw');
+      }
+
+      // ── Total validation ──
+      let totalOk = true;
+      let totalNote = '';
+      if (excelTotal && excelTotal.trim() !== '' && pdfTotal !== null) {
+        totalOk = totalsMatch(pdfTotal, excelTotal);
+        if (totalOk) {
+          totalNote = `Total ✓ (PDF: ${pdfTotal?.toFixed(2)} = Excel: ${excelTotal})`;
+          log(`  ✓ Total match! PDF=${pdfTotal?.toFixed(3)} vs Excel=${excelTotal}`, 'lok');
+        } else {
+          totalNote = `Total MISMATCH (PDF: ${pdfTotal?.toFixed(2)} ≠ Excel: ${excelTotal})`;
+          log(`  ✗ Total MISMATCH — PDF total=${pdfTotal?.toFixed(3)}, Excel total=${excelTotal} → placing in Unmatched`, 'le');
+          results.push({name:f.name, buf:bufU8, origFile:f, orderNum, soNum, pdfTotal, excelTotal, ok:false, reason:'total_mismatch'});
+          noMatch++;
+          prog(15+(i+1)*step); continue;
+        }
+      } else if (excelTotal && excelTotal.trim() !== '' && pdfTotal === null) {
+        totalNote = `Total check skipped (PDF total not readable)`;
+        log(`  ⚠ Skipping total check — could not read PDF total`, 'lw');
+      } else {
+        totalNote = `No Total column in Excel — skipped`;
+      }
+
+      log(`  Stamping PDF…`, 'li');
+      const stamped_bytes = await stampSO(buf.slice(0), soNum, vendor, deadlineItem, deadlineValue, termsItem, tableHeaderItem, bigItem, purchaseOrderItem);
+      log('  ✓ Done!', 'lok');
+
+      results.push({name:f.name,buf:new Uint8Array(stamped_bytes),orderNum,soNum,pdfTotal,excelTotal,totalNote,ok:true});
+      stamped++;
+      prog(15+(i+1)*step);
+    }
+
+    prog(100);
+    log(`\n── Complete: ${stamped} stamped, ${noMatch} unmatched ──`, 'lh');
+    showResults(stamped, noMatch);
+
+  } catch(err) {
+    log(`Fatal: ${err.message}`, 'le');
+    console.error(err);
+  } finally {
+    btn.disabled=false; btn.textContent='⚡ Extract · Match · Stamp PDFs';
+    check();
+  }
+}
+
+// ── Results ───────────────────────────────────────────────────────
+// ── Active filter: 'all' | 'ok' | 'miss' ─────────────────────────
+let activeFilter = 'all';
+let modalResultIdx = -1;
+let modalBlobUrl = null;
+
+// ── Show results with clickable stat tabs ─────────────────────────
+function showResults(stamped, noMatch) {
+  activeFilter = 'all';
+  document.getElementById('resArea').classList.add('show');
+  renderStats(stamped, noMatch);
+  renderList();
+}
+
+function renderStats(stamped, noMatch) {
+  const total        = results.length;
+  const totalMiss    = results.filter(r => !r.ok && r.reason === 'total_mismatch').length;
+  const noExcel      = results.filter(r => !r.ok && r.reason !== 'total_mismatch').length;
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat ${activeFilter==='all'  ?'active-all' :''}"  onclick="setFilter('all')"  title="View all PDFs">
+      <span class="sv b">${total}</span>
+      <span>📄 Total PDFs</span>
+      <span class="stat-hint">click to show all</span>
+    </div>
+    <div class="stat ${activeFilter==='ok'  ?'active-ok' :''}"  onclick="setFilter('ok')"  title="View stamped PDFs">
+      <span class="sv g">${stamped}</span>
+      <span>✅ Stamped &amp; Matched</span>
+      <span class="stat-hint">LPO + Total both matched</span>
+    </div>
+    <div class="stat ${activeFilter==='tmiss'?'active-miss':''}" onclick="setFilter('tmiss')" title="Total value mismatch">
+      <span class="sv" style="color:var(--accent2)">${totalMiss}</span>
+      <span>⚖ Total Mismatch</span>
+      <span class="stat-hint">PDF total ≠ Excel total</span>
+    </div>
+    <div class="stat ${activeFilter==='miss'?'active-miss':''}" onclick="setFilter('miss')" title="View unmatched PDFs">
+      <span class="sv y">${noExcel}</span>
+      <span>⚠ No Excel Match</span>
+      <span class="stat-hint">LPO not found in Excel</span>
+    </div>
+  `;
+}
+
+function setFilter(f) {
+  activeFilter = f;
+  const stamped   = results.filter(r=>r.ok).length;
+  const noMatch   = results.filter(r=>!r.ok).length;
+  renderStats(stamped, noMatch);
+  renderList();
+}
+
+function renderList() {
+  const filtered = results.map((r,i)=>({r,i})).filter(({r}) => {
+    if (activeFilter==='ok')    return r.ok;
+    if (activeFilter==='miss')  return !r.ok && r.reason !== 'total_mismatch';
+    if (activeFilter==='tmiss') return !r.ok && r.reason === 'total_mismatch';
+    return true;
+  });
+
+  const labels = {all:'All PDFs', ok:'Stamped PDFs', miss:'Unmatched (No Excel Match)', tmiss:'Total Mismatch PDFs'};
+  document.getElementById('listLabel').innerHTML =
+    `Showing <span id="listCount">${filtered.length}</span> · ${labels[activeFilter]||'All PDFs'}`;
+
+  const dlBtn = document.getElementById('dlFilterBtn');
+  if (activeFilter==='ok') {
+    dlBtn.textContent = '⬇ Download Stamped as ZIP';
+    dlBtn.style.display = '';
+  } else if (activeFilter==='all') {
+    dlBtn.textContent = '⬇ Download Stamped as ZIP';
+    dlBtn.style.display = '';
+  } else if (activeFilter==='miss' || activeFilter==='tmiss') {
+    dlBtn.textContent = '⬇ Download Unmatched as ZIP';
+    dlBtn.style.display = '';
+  } else {
+    dlBtn.style.display = 'none';
+  }
+
+  if (!filtered.length) {
+    document.getElementById('resItems').innerHTML =
+      `<div style="text-align:center;padding:32px;font-family:var(--mono);font-size:13px;color:var(--muted)">No PDFs in this category</div>`;
+    return;
+  }
+
+  document.getElementById('resItems').innerHTML = filtered.map(({r,i}) => {
+    // Determine badge and reason text
+    let reasonBadge = '';
+    if (!r.ok) {
+      if (r.reason === 'total_mismatch') {
+        reasonBadge = `<span class="rm">⚖ Total Mismatch · PDF: ${r.pdfTotal?.toFixed(2)??'?'} ≠ Excel: ${r.excelTotal??'?'}</span>`;
+      } else if (r.reason === 'no_excel_match') {
+        reasonBadge = `<span class="rm">No Excel match</span>`;
+      } else if (r.reason === 'no_order') {
+        reasonBadge = `<span class="rm">No LPO found</span>`;
+      } else {
+        reasonBadge = `<span class="rm">Unmatched</span>`;
+      }
+    }
+
+    return `
+    <div class="ri ${r.ok?'ok':'miss'}">
+      <span style="font-size:20px">${r.ok?'✅':r.reason==='total_mismatch'?'⚖️':'⚠️'}</span>
+      <span class="rn" title="${r.name}">${r.name}</span>
+      ${r.orderNum ? `<span class="rl">LPO: ${r.orderNum}</span>` : '<span class="rm">No LPO found</span>'}
+      ${r.soNum    ? `<span class="rs">SO: ${r.soNum}</span>`    : ''}
+      ${r.ok && r.totalNote ? `<span style="font-family:var(--mono);font-size:10px;color:var(--green);background:rgba(0,223,162,.08);border:1px solid rgba(0,223,162,.2);padding:2px 7px;border-radius:5px;white-space:nowrap">${r.totalNote}</span>` : ''}
+      ${!r.ok ? reasonBadge : ''}
+      <div class="ri-btns">
+        ${r.ok ? `<button class="vb" onclick="viewPdf(${i})">👁 View</button>` : ''}
+        ${r.ok ? `<button class="db" onclick="dlOne(${i})">⬇ Download</button>` : ''}
+      </div>
+    </div>`}).join('');
+}
+
+// ── PDF Viewer Modal ──────────────────────────────────────────────
+function viewPdf(i) {
+  const r = results[i];
+  if (!r || !r.ok) return;
+  modalResultIdx = i;
+
+  // Revoke previous blob
+  if (modalBlobUrl) { URL.revokeObjectURL(modalBlobUrl); modalBlobUrl = null; }
+
+  const data = r.buf instanceof Uint8Array ? r.buf : new Uint8Array(r.buf);
+  const blob = new Blob([data], {type:'application/pdf'});
+  modalBlobUrl = URL.createObjectURL(blob);
+
+  document.getElementById('modalTitle').textContent = r.name;
+  document.getElementById('modalBadges').innerHTML = `
+    <span class="rl">LPO: ${r.orderNum}</span>
+    <span class="rs">SO: ${r.soNum}</span>
+  `;
+  document.getElementById('modalInfo').textContent =
+    `Stamped file · ${(data.byteLength/1024).toFixed(1)} KB`;
+  document.getElementById('modalDlBtn').style.display = '';
+  document.getElementById('modalFrame').src = modalBlobUrl;
+  document.getElementById('pdfModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModalDirect() {
+  document.getElementById('pdfModal').classList.remove('open');
+  document.getElementById('modalFrame').src = 'about:blank';
+  document.body.style.overflow = '';
+  if (modalBlobUrl) { setTimeout(()=>{ URL.revokeObjectURL(modalBlobUrl); modalBlobUrl=null; }, 1000); }
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('pdfModal')) closeModalDirect();
+}
+
+function dlFromModal() {
+  if (modalResultIdx >= 0) dlOne(modalResultIdx);
+}
+
+// ── Download helpers ──────────────────────────────────────────────
+
+// Single PDF download — always safe, one file = no browser block
+function dlOne(i) {
+  const r = results[i];
+  if (!r || !r.ok) return;
+  try {
+    const data = r.buf instanceof Uint8Array ? r.buf : new Uint8Array(r.buf);
+    const blob = new Blob([data], {type:'application/pdf'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = r.name.replace(/\.pdf$/i,'') + '_SO_stamped.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch(e) {
+    log(`Download error for ${r.name}: ${e.message}`, 'le');
+    console.error(e);
+  }
+}
+
+// ZIP download — bundles all stamped PDFs into one .zip, works for everyone everywhere
+async function dlAsZip(label) {
+  const okList = results.filter(r => r.ok);
+  if (!okList.length) { alert('No stamped PDFs to download.'); return; }
+
+  const dlBtn = document.getElementById('dlFilterBtn');
+  const orig  = dlBtn.textContent;
+  dlBtn.textContent = '⏳ Zipping…';
+  dlBtn.disabled = true;
+
+  try {
+    const zip = new JSZip();
+    const folder = zip.folder('Stamped_LPOs');
+
+    okList.forEach(r => {
+      const data = r.buf instanceof Uint8Array ? r.buf : new Uint8Array(r.buf);
+      const fname = r.name.replace(/\.pdf$/i,'') + '_SO_stamped.pdf';
+      folder.file(fname, data);
+    });
+
+    const zipBlob = await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 }
+    });
+
+    const now    = new Date();
+    const ts     = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    const url    = URL.createObjectURL(zipBlob);
+    const a      = document.createElement('a');
+    a.href       = url;
+    a.download   = `Stamped_LPOs_${ts}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+
+    log(`ZIP created: ${okList.length} PDFs → Stamped_LPOs_${ts}.zip`, 'lok');
+  } catch(e) {
+    log(`ZIP error: ${e.message}`, 'le');
+    alert('ZIP creation failed: ' + e.message);
+    console.error(e);
+  } finally {
+    dlBtn.textContent = orig;
+    dlBtn.disabled = false;
+  }
+}
+
+function dlFiltered() {
+  if (activeFilter === 'miss' || activeFilter === 'tmiss') dlUnmatchedZip();
+  else dlAsZip('stamped');
+}
+function dlAll() { dlAsZip('all'); }
+
+// ZIP download for UNMATCHED PDFs — split into two folders
+async function dlUnmatchedZip() {
+  const missList = results.filter(r => !r.ok);
+  if (!missList.length) { alert('No unmatched PDFs to download.'); return; }
+
+  const dlBtn = document.getElementById('dlFilterBtn');
+  const orig  = dlBtn.textContent;
+  dlBtn.textContent = '⏳ Zipping…';
+  dlBtn.disabled = true;
+
+  try {
+    const zip         = new JSZip();
+    const folderNoEx  = zip.folder('Unmatched_No_Excel_Match');
+    const folderTotal = zip.folder('Unmatched_Total_Mismatch');
+
+    for (const r of missList) {
+      try {
+        const data = r.buf instanceof Uint8Array ? r.buf :
+                     r.buf instanceof ArrayBuffer ? new Uint8Array(r.buf) :
+                     new Uint8Array(await r.origFile.arrayBuffer());
+
+        if (r.reason === 'total_mismatch') {
+          // Rename file to show values for easy review
+          const tag   = `_PDF${Math.floor(r.pdfTotal||0)}_XL${Math.floor(parseFloat(String(r.excelTotal||'0').replace(/,/g,''))||0)}`;
+          const fname = r.name.replace(/\.pdf$/i, '') + tag + '_TOTAL_MISMATCH.pdf';
+          folderTotal.file(fname, data);
+        } else {
+          folderNoEx.file(r.name, data);
+        }
+      } catch(e) {
+        log(`  Skipped ${r.name}: ${e.message}`, 'lw');
+      }
+    }
+
+    const zipBlob = await zip.generateAsync({
+      type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 }
+    });
+
+    const now  = new Date();
+    const ts   = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    const url  = URL.createObjectURL(zipBlob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `Unmatched_LPOs_${ts}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+
+    const noExCount    = missList.filter(r => r.reason !== 'total_mismatch').length;
+    const totalMissCnt = missList.filter(r => r.reason === 'total_mismatch').length;
+    log(`ZIP: ${noExCount} no-match + ${totalMissCnt} total-mismatch → Unmatched_LPOs_${ts}.zip`, 'lok');
+  } catch(e) {
+    log(`ZIP error: ${e.message}`, 'le');
+    alert('ZIP creation failed: ' + e.message);
+    console.error(e);
+  } finally {
+    dlBtn.textContent = orig;
+    dlBtn.disabled = false;
+  }
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeModalDirect(); });
+</script>
+</body>
+</html>
