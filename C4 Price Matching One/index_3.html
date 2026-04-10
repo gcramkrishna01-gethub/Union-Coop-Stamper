@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LPO Data Extractor — LuLu / C4</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📑</text></svg>">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg:#0b0c10; --surface:#13141a; --card:#1c1d26; --border:#2c2d3f;
+  --accent:#4f6ef7; --accent2:#ff5c5c; --green:#00dfa2; --yellow:#ffd166;
+  --text:#e6e7f0; --muted:#63647f;
+  --mono:'DM Mono',monospace; --sans:'Syne',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(79,110,247,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(79,110,247,.035) 1px,transparent 1px);background-size:44px 44px;pointer-events:none;z-index:0}
+.blob{position:fixed;border-radius:50%;pointer-events:none;z-index:0;filter:blur(60px)}
+.b1{width:500px;height:500px;background:rgba(79,110,247,.10);top:-180px;left:-150px;animation:bm 9s ease-in-out infinite}
+.b2{width:350px;height:350px;background:rgba(0,223,162,.07);bottom:-100px;right:-80px;animation:bm 12s ease-in-out infinite reverse}
+@keyframes bm{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,25px) scale(1.05)}}
+.wrap{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:44px 24px 100px}
+
+header{text-align:center;margin-bottom:48px}
+.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(79,110,247,.12);border:1px solid rgba(79,110,247,.28);color:var(--accent);font-family:var(--mono);font-size:11px;letter-spacing:.14em;padding:4px 14px;border-radius:20px;text-transform:uppercase;margin-bottom:18px}
+.badge::before{content:'●';font-size:8px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+h1{font-size:clamp(26px,5vw,44px);font-weight:800;letter-spacing:-.025em;line-height:1.1;margin-bottom:10px;background:linear-gradient(130deg,#fff 0%,#8895ff 45%,#00dfa2 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sub{color:var(--muted);font-size:13px;font-family:var(--mono)}
+
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 18px;margin-bottom:26px}
+.fs{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--muted);padding:3px 0;flex-shrink:0}
+.fn{width:19px;height:19px;border-radius:5px;background:rgba(79,110,247,.2);border:1px solid rgba(79,110,247,.3);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.fa{color:var(--border);font-size:14px;padding:0 6px}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;transition:border-color .25s;margin-bottom:18px}
+.card:hover{border-color:rgba(79,110,247,.35)}
+.ch{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.sb{width:26px;height:26px;border-radius:7px;background:rgba(79,110,247,.18);border:1px solid rgba(79,110,247,.35);color:var(--accent);font-family:var(--mono);font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ct{font-size:14px;font-weight:700;letter-spacing:-.01em}
+.cs{font-size:11px;color:var(--muted);font-family:var(--mono)}
+
+.dz{border:1.5px dashed var(--border);border-radius:10px;padding:28px 14px;text-align:center;cursor:pointer;transition:all .2s}
+.dz:hover,.dz.over{border-color:var(--accent);background:rgba(79,110,247,.04)}
+.dz-i{font-size:32px;margin-bottom:8px;display:block}
+.dz-t{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.dz-t em{color:var(--accent);font-style:normal;text-decoration:underline;cursor:pointer}
+
+.pdf-previews{margin-top:12px;display:none;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;padding-right:4px}
+.pdf-previews.show{display:flex}
+.pdf-prev-item{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;transition:border-color .2s}
+.pdf-prev-item:hover{border-color:rgba(79,110,247,.4)}
+.pdf-thumb-wrap{width:52px;height:68px;flex-shrink:0;border-radius:6px;overflow:hidden;background:#222;border:1px solid var(--border);position:relative;cursor:pointer}
+.pdf-thumb-wrap canvas{width:100%;height:100%;object-fit:cover;display:block}
+.thumb-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--muted)}
+.pdf-prev-info{flex:1;min-width:0}
+.pdf-prev-name{font-family:var(--mono);font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.pdf-prev-meta{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.pdf-prev-btns{display:flex;gap:5px;flex-shrink:0}
+.pdf-eye{background:rgba(79,110,247,.15);color:var(--accent);border:1px solid rgba(79,110,247,.3);border-radius:6px;padding:4px 10px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s}
+.pdf-eye:hover{background:rgba(79,110,247,.3)}
+.pdf-rm{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px 6px;transition:color .15s;border-radius:5px}
+.pdf-rm:hover{color:var(--accent2);background:rgba(255,92,92,.1)}
+
+.btnrow{display:flex;gap:10px;margin-bottom:14px}
+.pbtn{flex:1;padding:15px;background:linear-gradient(135deg,var(--accent),#7a8bff);border:none;border-radius:12px;color:#fff;font-family:var(--sans);font-size:15px;font-weight:700;letter-spacing:-.01em;cursor:pointer;transition:opacity .2s,transform .15s}
+.pbtn:hover:not(:disabled){opacity:.9}
+.pbtn:active:not(:disabled){transform:scale(.99)}
+.pbtn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.cbtn{padding:15px 20px;background:transparent;border:1.5px solid var(--border);border-radius:12px;color:var(--muted);font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap}
+.cbtn:hover:not(:disabled){border-color:var(--accent2);color:var(--accent2);background:rgba(255,92,92,.06)}
+.cbtn:disabled{opacity:.3;cursor:not-allowed}
+
+.pbar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:14px;display:none}
+.pbar.show{display:block}
+.pf{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:2px;width:0%;transition:width .35s ease}
+
+.log{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--mono);font-size:11px;max-height:220px;overflow-y:auto;display:none;margin-bottom:14px;line-height:1.7}
+.log.show{display:block}
+.li{color:var(--muted)} .lok{color:var(--green)} .lw{color:var(--yellow)} .le{color:var(--accent2)} .lh{color:var(--accent);font-weight:500}
+
+.res{display:none}
+.res.show{display:block}
+.stats{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 20px;font-family:var(--mono);font-size:11px;cursor:pointer;transition:all .2s;user-select:none;display:flex;flex-direction:column;gap:2px}
+.stat:hover{border-color:rgba(79,110,247,.5);background:rgba(79,110,247,.05)}
+.stat.active-all    {border-color:var(--accent); background:rgba(79,110,247,.12)}
+.stat.active-ok     {border-color:var(--green);  background:rgba(0,223,162,.1)}
+.stat.active-partial{border-color:var(--yellow); background:rgba(255,209,102,.08)}
+.stat.active-err    {border-color:var(--accent2);background:rgba(255,92,92,.08)}
+.stat-hint{font-size:10px;color:var(--muted);letter-spacing:.05em}
+.sv{font-size:24px;font-weight:800;font-family:var(--sans);display:block;line-height:1}
+.sv.g{color:var(--green)} .sv.y{color:var(--yellow)} .sv.b{color:var(--accent)} .sv.r{color:var(--accent2)}
+
+.rh{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.rt{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.rt span{color:var(--text);font-weight:600}
+.da{background:rgba(0,223,162,.12);color:var(--green);border:1px solid rgba(0,223,162,.25);border-radius:8px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s}
+.da:hover:not(:disabled){background:rgba(0,223,162,.25)}
+.da:disabled{opacity:.35;cursor:not-allowed}
+
+/* PDF result block */
+.pdf-block{background:var(--card);border:1px solid var(--border);border-radius:14px;margin-bottom:14px;overflow:hidden}
+.pdf-block.ok     {border-color:rgba(0,223,162,.22)}
+.pdf-block.partial{border-color:rgba(255,209,102,.2)}
+.pdf-block.err    {border-color:rgba(255,92,92,.2)}
+.pdf-block-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.pdf-block-name{font-family:var(--mono);font-size:12px;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbadge{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:5px;white-space:nowrap;flex-shrink:0}
+.pbadge.ok     {color:var(--green); background:rgba(0,223,162,.1); border:1px solid rgba(0,223,162,.22)}
+.pbadge.partial{color:var(--yellow);background:rgba(255,209,102,.1);border:1px solid rgba(255,209,102,.22)}
+.pbadge.err    {color:var(--accent2);background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.18)}
+.chip{font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:5px;white-space:nowrap;flex-shrink:0}
+.chip strong{color:var(--text)}
+.vb{background:rgba(79,110,247,.18);color:var(--accent);border:1px solid rgba(79,110,247,.3);border-radius:7px;padding:5px 12px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;flex-shrink:0}
+.vb:hover{background:rgba(79,110,247,.3)}
+
+/* Line items table */
+.li-table-wrap{overflow-x:auto;position:relative}
+.li-table-scroll{overflow-y:auto;max-height:205px} /* ~5 rows × 41px each */
+.li-table-scroll::-webkit-scrollbar{width:5px}
+.li-table-scroll::-webkit-scrollbar-track{background:var(--surface)}
+.li-table-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.li-table-scroll::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+.li-table{width:100%;border-collapse:collapse;font-size:12px;min-width:820px}
+.li-table thead{position:sticky;top:0;z-index:5}
+.li-table thead tr{background:#1a1c27}
+.li-table th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;background:#1a1c27}
+.li-table td{font-family:var(--mono);font-size:11px;color:var(--text);padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;white-space:nowrap}
+.li-table tbody tr:last-child td{border-bottom:none}
+.li-table tbody tr:hover td{background:rgba(79,110,247,.035)}
+.li-table td[contenteditable="true"]:focus{outline:1px solid var(--accent);border-radius:3px;background:rgba(79,110,247,.08);white-space:normal}
+/* Row count footer */
+.table-footer{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:rgba(79,110,247,.04);border-top:1px solid var(--border)}
+.table-footer-txt{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.table-footer-txt strong{color:var(--accent)}
+.scroll-hint{font-family:var(--mono);font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.scroll-hint svg{opacity:.5}
+.td-lpo{color:var(--accent)!important;font-weight:500}
+.td-4d{color:var(--yellow)!important}
+.td-r{text-align:right}
+.td-empty{color:var(--muted);font-style:italic}
+
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:18px;width:100%;max-width:920px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.modal-head{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+.modal-title{flex:1;font-family:var(--mono);font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.modal-close{background:rgba(255,92,92,.15);color:var(--accent2);border:1px solid rgba(255,92,92,.25);border-radius:8px;padding:5px 12px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s}
+.modal-close:hover{background:rgba(255,92,92,.3)}
+.modal-body{flex:1;overflow:hidden;background:#1a1a1a;min-height:300px}
+.modal-body iframe{width:100%;height:100%;border:none;display:block}
+.modal-foot{padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0}
+.modal-info{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+@media(max-width:600px){.btnrow{flex-direction:column}.cbtn{text-align:center}}
+</style>
+</head>
+<body>
+<div class="blob b1"></div>
+<div class="blob b2"></div>
+
+<div class="wrap">
+  <header>
+    <div class="badge">LuLu · C4 · LPO Extraction</div>
+    <h1>LPO Data Extractor</h1>
+    <p class="sub">Upload LPO PDFs · Each line item becomes one Excel row</p>
+  </header>
+
+  <div class="flow">
+    <div class="fs"><div class="fn">1</div>Upload LPO PDFs</div><div class="fa">→</div>
+    <div class="fs"><div class="fn">2</div>Auto-read all line items</div><div class="fa">→</div>
+    <div class="fs"><div class="fn">3</div>Review &amp; edit table</div><div class="fa">→</div>
+    <div class="fs"><div class="fn">4</div>Export Excel (A–H)</div>
+  </div>
+
+  <!-- Upload -->
+  <div class="card">
+    <div class="ch">
+      <div class="sb">01</div>
+      <div><div class="ct">Upload LPO PDF Files</div><div class="cs">LuLu, C4 and similar PO formats supported</div></div>
+    </div>
+    <input type="file" id="pdfIn" accept=".pdf" multiple style="display:none">
+    <div class="dz" id="pdfDrop">
+      <span class="dz-i">📑</span>
+      <div class="dz-t">Drop your LPO PDFs here or <em onclick="document.getElementById('pdfIn').click()">browse files</em></div>
+      <div class="dz-t" style="margin-top:5px">Multiple PDFs — each line item → one Excel row</div>
+    </div>
+    <div class="pdf-previews" id="pdfPreviews"></div>
+  </div>
+
+  <!-- Column map -->
+  <div class="card" style="border-color:rgba(79,110,247,.22)">
+    <div class="ch" style="margin-bottom:10px">
+      <div class="sb">02</div>
+      <div><div class="ct">Output Format</div><div class="cs">Matches your Excel template exactly</div></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px">
+      <span style="font-family:var(--mono);font-size:10px;background:rgba(79,110,247,.1);border:1px solid rgba(79,110,247,.2);color:var(--accent);padding:4px 10px;border-radius:6px">A · LPO Number</span>
+      <span style="font-family:var(--mono);font-size:10px;background:rgba(79,110,247,.1);border:1px solid rgba(79,110,247,.2);color:var(--accent);padding:4px 10px;border-radius:6px">B · Supplier Reference</span>
+      <span style="font-family:var(--mono);font-size:10px;background:rgba(79,110,247,.1);border:1px solid rgba(79,110,247,.2);color:var(--accent);padding:4px 10px;border-radius:6px">C · Article Description</span>
+      <span style="font-family:var(--mono);font-size:10px;background:rgba(79,110,247,.1);border:1px solid rgba(79,110,247,.2);color:var(--accent);padding:4px 10px;border-radius:6px">D · Barcode</span>
+      <span style="font-family:var(--mono);font-size:10px;background:rgba(79,110,247,.1);border:1px solid rgba(79,110,247,.2);color:var(--accent);padding:4px 10px;border-radius:6px">E · Quantity</span>
+      <span style="font-family:var(--mono);font-size:10px;background:rgba(79,110,247,.1);border:1px solid rgba(79,110,247,.2);color:var(--accent);padding:4px 10px;border-radius:6px">F · UOM</span>
+      <span style="font-family:var(--mono);font-size:10px;background:rgba(79,110,247,.1);border:1px solid rgba(79,110,247,.2);color:var(--accent);padding:4px 10px;border-radius:6px">G · Total Gross</span>
+      <span style="font-family:var(--mono);font-size:10px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);color:var(--yellow);padding:4px 10px;border-radius:6px">H · 4-Digit Branch Code</span>
+    </div>
+  </div>
+
+  <!-- Run -->
+  <div class="btnrow">
+    <button class="pbtn" id="procBtn" disabled onclick="run()">⚡ Extract Line Items from All PDFs</button>
+    <button class="cbtn" id="clearBtn" disabled onclick="clearAll()">🗑 Clear All</button>
+  </div>
+
+  <div class="pbar" id="pbar"><div class="pf" id="pfill"></div></div>
+  <div class="log"  id="logBox"></div>
+
+  <!-- Results -->
+  <div class="res" id="resArea">
+    <div class="stats" id="statsBar"></div>
+    <div class="rh">
+      <div class="rt"><span id="totalRows">0</span> line items · <span id="totalPdfs">0</span> PDFs</div>
+      <button class="da" id="xlBtn" onclick="exportExcel()">⬇ Export to Excel</button>
+    </div>
+    <div id="resItems"></div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-bg" id="pdfModal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="modalTitle">—</div>
+      <button class="modal-close" onclick="closeModal()">✕ Close</button>
+    </div>
+    <div class="modal-body" style="height:70vh">
+      <iframe id="modalFrame" src="about:blank"></iframe>
+    </div>
+    <div class="modal-foot"><div class="modal-info" id="modalInfo"></div></div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let pdfFiles    = [];
+let allResults  = [];
+let activeFilter = 'all';
+let modalBlobUrl = null;
+
+// ── Drag & Drop ───────────────────────────────────────────────────────
+const dropZone = document.getElementById('pdfDrop');
+const pdfInput = document.getElementById('pdfIn');
+dropZone.addEventListener('click', e => { if (e.target.tagName !== 'EM') pdfInput.click(); });
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); addPdfs(e.dataTransfer.files); });
+pdfInput.addEventListener('change', e => addPdfs(e.target.files));
+
+function addPdfs(files) {
+  const ps = [...files].filter(f => /\.pdf$/i.test(f.name));
+  if (!ps.length) { alert('Please select PDF files.'); return; }
+  ps.forEach(f => { if (!pdfFiles.find(x => x.name===f.name && x.size===f.size)) pdfFiles.push(f); });
+  renderPreviews(); check();
+}
+
+// ── Thumbnails ────────────────────────────────────────────────────────
+function renderPreviews() {
+  const wrap = document.getElementById('pdfPreviews');
+  if (!pdfFiles.length) { wrap.classList.remove('show'); wrap.innerHTML=''; return; }
+  wrap.classList.add('show');
+  wrap.innerHTML = pdfFiles.map((f,i) => `
+    <div class="pdf-prev-item">
+      <div class="pdf-thumb-wrap" onclick="previewPdf(${i})">
+        <div class="thumb-loading" id="tl-${i}">⏳</div>
+        <canvas id="tc-${i}" style="display:none"></canvas>
+      </div>
+      <div class="pdf-prev-info">
+        <div class="pdf-prev-name" title="${f.name}">${f.name}</div>
+        <div class="pdf-prev-meta" id="tm-${i}">${(f.size/1024).toFixed(1)} KB · loading…</div>
+      </div>
+      <div class="pdf-prev-btns">
+        <button class="pdf-eye" onclick="previewPdf(${i})">👁 Preview</button>
+        <button class="pdf-rm"  onclick="rmPdf(${i})">✕</button>
+      </div>
+    </div>`).join('');
+  pdfFiles.forEach((f,i) => renderThumb(f,i));
+}
+async function renderThumb(file, i) {
+  try {
+    const pdf  = await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+    const page = await pdf.getPage(1);
+    const vp   = page.getViewport({scale:0.28});
+    const canvas = document.getElementById('tc-'+i);
+    const loading = document.getElementById('tl-'+i);
+    if (!canvas) return;
+    canvas.width=vp.width; canvas.height=vp.height;
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+    canvas.style.display='block';
+    if (loading) loading.style.display='none';
+    const meta = document.getElementById('tm-'+i);
+    if (meta) meta.textContent=`${(file.size/1024).toFixed(1)} KB · ${pdf.numPages} page${pdf.numPages>1?'s':''}`;
+  } catch(e) {
+    const l=document.getElementById('tl-'+i); if(l) l.textContent='📄';
+  }
+}
+function rmPdf(i) { pdfFiles.splice(i,1); renderPreviews(); check(); }
+
+// ── Modal ─────────────────────────────────────────────────────────────
+async function previewPdf(i) {
+  const f = pdfFiles[i]; if (!f) return;
+  if (modalBlobUrl) { URL.revokeObjectURL(modalBlobUrl); modalBlobUrl=null; }
+  modalBlobUrl = URL.createObjectURL(new Blob([await f.arrayBuffer()],{type:'application/pdf'}));
+  document.getElementById('modalTitle').textContent = f.name;
+  document.getElementById('modalInfo').textContent  = `${(f.size/1024).toFixed(1)} KB`;
+  document.getElementById('modalFrame').src = modalBlobUrl;
+  document.getElementById('pdfModal').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeModal() {
+  document.getElementById('pdfModal').classList.remove('open');
+  document.body.style.overflow='';
+  document.getElementById('modalFrame').src='about:blank';
+  if (modalBlobUrl) { setTimeout(()=>{URL.revokeObjectURL(modalBlobUrl);modalBlobUrl=null;},500); }
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+
+function check() {
+  document.getElementById('procBtn').disabled = !pdfFiles.length;
+  document.getElementById('clearBtn').disabled = !pdfFiles.length && !allResults.length;
+}
+function clearAll() {
+  pdfFiles=[]; allResults=[]; activeFilter='all';
+  pdfInput.value='';
+  const pp=document.getElementById('pdfPreviews'); pp.innerHTML=''; pp.classList.remove('show');
+  document.getElementById('logBox').innerHTML=''; document.getElementById('logBox').classList.remove('show');
+  document.getElementById('pbar').classList.remove('show');
+  document.getElementById('pfill').style.width='0%';
+  document.getElementById('resArea').classList.remove('show');
+  check();
+}
+function log(msg,cls='li') {
+  const b=document.getElementById('logBox'); b.classList.add('show');
+  const d=document.createElement('div'); d.className=cls;
+  d.textContent=`[${new Date().toLocaleTimeString('en-US',{hour12:false})}] ${msg}`;
+  b.appendChild(d); b.scrollTop=b.scrollHeight;
+}
+function prog(p){ document.getElementById('pbar').classList.add('show'); document.getElementById('pfill').style.width=p+'%'; }
+
+// ── PDF Text Extraction with position data ────────────────────────────
+async function getPdfData(file) {
+  const pdf = await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const pages = [];
+  for (let p=1; p<=pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc   = await page.getTextContent();
+    const vp   = page.getViewport({scale:1});
+    // Each item has: str, transform[4]=x, transform[5]=y
+    pages.push({
+      items:  tc.items.map(it => ({ str: it.str, x: it.transform[4], y: vp.height - it.transform[5], w: it.width, h: it.height })),
+      width:  vp.width,
+      height: vp.height,
+      text:   tc.items.map(it=>it.str).join(' '),
+    });
+  }
+  return pages;
+}
+
+// ── Core LPO Parser ───────────────────────────────────────────────────
+function parseLpo(pages) {
+  const fullText = pages.map(p=>p.text).join('\n');
+
+  // ─ LPO / PO Number ─
+  let lpoNum = '';
+  for (const rx of [
+    /Purchase\s+Order\s+#\s*[:\-]?\s*(\d{7,15})/i,
+    /Purchase\s+Order\s+No\.?\s*[:\-]?\s*(\d{7,15})/i,
+    /PO\s*(?:Number|No\.?|#)\s*[:\-]?\s*(\d{7,15})/i,
+    /Order\s+No\.?\s*[:\-]?\s*(\d{7,15})/i,
+    /\bLPO\s*[-:#]?\s*(\d{7,15})/i,
+  ]) {
+    const m=fullText.match(rx); if(m){lpoNum=m[1].trim();break;}
+  }
+  // Barcode on the document itself often IS the LPO number
+  if (!lpoNum) {
+    const m=fullText.match(/\b(\d{10})\b/); if(m) lpoNum=m[1];
+  }
+
+  // ─ Four-digit branch/store code (top-left) ─
+  // In LuLu POs the first item on the page is like "2344 LULU..."
+  let fourDigit = '';
+  const branchM = fullText.match(/(\d{4})\s+(?:LULU|LuLu|Carrefour|C4|HYPERMARKET|MARKET|STORE)/i);
+  if (branchM) {
+    fourDigit = branchM[1];
+  } else {
+    // Fall back to very first 4-digit number in top-left area of page 1
+    if (pages[0]) {
+      // Sort items by y then x — find items in top-left quadrant
+      const topLeft = pages[0].items
+        .filter(it => it.y < pages[0].height * 0.15 && it.x < pages[0].width * 0.35)
+        .sort((a,b)=>a.y-b.y||a.x-b.x);
+      for (const it of topLeft) {
+        const m=it.str.match(/^\d{4}$/); if(m){fourDigit=it.str;break;}
+        const m2=it.str.match(/\b(\d{4})\b/); if(m2){fourDigit=m2[1];break;}
+      }
+    }
+    if (!fourDigit) {
+      const m=fullText.match(/\b(\d{4})\b/); if(m) fourDigit=m[1];
+    }
+  }
+
+  // ─ Total Gross ─
+  let totalGross = '';
+  for (const rx of [
+    /Total\s+Gross\s*[:\|]?\s*([\d,]+\.?\d*)/i,
+    /Total\s+Invoice\s+Cost\s*\(?incl\.?\s*ET\)?\s*[:\|]?\s*([\d,]+\.?\d*)/i,
+    /Grand\s+Total\s*[:\|]?\s*([\d,]+\.?\d*)/i,
+    /Total\s+Inv\.?\s+Cost\s*[:\|]?\s*([\d,]+\.?\d*)/i,
+  ]) {
+    const m=fullText.match(rx); if(m){totalGross=m[1].replace(/,/g,'');break;}
+  }
+
+  // ─ Line items ─
+  const items = extractItems(pages, fullText, lpoNum, totalGross, fourDigit);
+
+  return { lpoNum, fourDigit, totalGross, items };
+}
+
+// ── Line Item Extractor ───────────────────────────────────────────────
+function extractItems(pages, fullText, lpoNum, totalGross, fourDigit) {
+  const results = [];
+  const usedBarcodes = new Set();
+
+  // ─── Strategy A: positional extraction using y-coordinate grouping ───
+  // Group text items into rows by Y position (within ±3px tolerance)
+  for (const page of pages) {
+    const rows = groupIntoRows(page.items, 3);
+
+    // Find header row
+    let headerRow = -1;
+    for (let ri=0; ri<rows.length; ri++) {
+      const rowText = rows[ri].map(it=>it.str).join(' ').toLowerCase();
+      if ((rowText.includes('barcode') || rowText.includes('article')) &&
+          (rowText.includes('qty') || rowText.includes('quantity') || rowText.includes('uom'))) {
+        headerRow = ri; break;
+      }
+    }
+
+    if (headerRow >= 0) {
+      // Build column map from header
+      const colMap = buildColumnMap(rows[headerRow], page.width);
+      // Extract data rows
+      for (let ri = headerRow+1; ri < rows.length; ri++) {
+        const row = rows[ri];
+        const rowText = row.map(it=>it.str).join(' ');
+        // Must contain a barcode-like number to be a data row
+        if (!/\d{8,14}/.test(rowText)) continue;
+        // Skip total/summary rows
+        if (/total|grand|vat|tax|discount|excise/i.test(rowText) && !/\d{8,14}/.test(rowText)) continue;
+
+        const item = extractRowByColumns(row, colMap, lpoNum, totalGross, fourDigit);
+        if (item && item.barcode && !usedBarcodes.has(item.barcode)) {
+          usedBarcodes.add(item.barcode);
+          results.push(item);
+        }
+      }
+    }
+  }
+
+  // ─── Strategy B: regex scan for barcodes in full text ───
+  if (results.length === 0) {
+    // LuLu specific: rows look like
+    // 0010 375197 609029 LURPAK Lurpak Butter 400g 2s PO 0000003751978 60 EA ...
+    const luluRow = /(?:^|\n)\s*(00\d0)\s+(\d+)\s+(\d{5,8})\s+\w+\s+(.+?)\s{2,}(\d{8,14})\s+(\d+(?:\.\d+)?)\s+(EA|PCS?|PCE|BOX|KG|LTR|NOS|SET|EACH|DZ|MTR|ROLL|CAN|BAG|PACK)\b/gim;
+    let m;
+    while((m=luluRow.exec(fullText))!==null) {
+      const barcode=m[5];
+      if (usedBarcodes.has(barcode)) continue;
+      usedBarcodes.add(barcode);
+      results.push({
+        lpoNumber:   lpoNum,
+        supplierRef: m[3],
+        description: m[4].trim(),
+        barcode,
+        qty:         m[6],
+        uom:         m[7].toUpperCase(),
+        totalGross,
+        fourDigit,
+      });
+    }
+  }
+
+  // ─── Strategy C: pure barcode-anchor scan ───
+  if (results.length === 0) {
+    const barcodeRx = /\b(\d{8,14})\b/g;
+    let m;
+    while((m=barcodeRx.exec(fullText))!==null) {
+      const barcode=m[1];
+      if (barcode===lpoNum) continue;
+      if (usedBarcodes.has(barcode)) continue;
+
+      const pos    = m.index;
+      const before = fullText.slice(Math.max(0,pos-250), pos);
+      const after  = fullText.slice(pos+barcode.length, pos+barcode.length+150);
+
+      // qty right after barcode
+      const qtyM = after.match(/^\s+(\d{1,6}(?:\.\d{1,3})?)/);
+      const qty  = qtyM ? qtyM[1] : '';
+
+      // uom
+      const uomRx = /\b(EA|PCS?|PCE|BOX|KG|KGS|LTR?|MTR?|NOS|SET|EACH|DZ|ROLL|CAN|BAG|PACK)\b/i;
+      const uomM  = after.match(uomRx);
+      const uom   = uomM ? uomM[1].toUpperCase() : '';
+
+      // supplier ref (6-digit number just before barcode)
+      const srM        = before.match(/\b(\d{5,8})\s*$/);
+      const supplierRef = srM ? srM[1] : '';
+
+      // description: text tokens before supplier ref
+      const descArea  = before.slice(Math.max(0, before.length-200));
+      const cleaned   = descArea.replace(/\s*\d{5,8}\s*$/,'').trim();
+      const descTokens= cleaned.split(/\s+/).filter(t=>/[A-Za-z]/.test(t)&&t.length>1);
+      const description = descTokens.slice(-8).join(' ');
+
+      if (!qty && !uom) continue;
+      usedBarcodes.add(barcode);
+      results.push({ lpoNumber:lpoNum, supplierRef, description, barcode, qty, uom, totalGross, fourDigit });
+    }
+  }
+
+  return results;
+}
+
+// Group text items into horizontal rows by Y proximity
+function groupIntoRows(items, tolerance=3) {
+  if (!items.length) return [];
+  const sorted = [...items].sort((a,b)=>a.y-b.y);
+  const rows = [];
+  let currentRow = [sorted[0]];
+  let currentY   = sorted[0].y;
+
+  for (let i=1; i<sorted.length; i++) {
+    if (Math.abs(sorted[i].y - currentY) <= tolerance) {
+      currentRow.push(sorted[i]);
+    } else {
+      rows.push(currentRow.sort((a,b)=>a.x-b.x));
+      currentRow = [sorted[i]];
+      currentY   = sorted[i].y;
+    }
+  }
+  rows.push(currentRow.sort((a,b)=>a.x-b.x));
+  return rows;
+}
+
+// Build a column map from the header row {colName: xCenter}
+function buildColumnMap(headerRow, pageWidth) {
+  const map = {};
+  for (const it of headerRow) {
+    const key = it.str.toLowerCase().trim();
+    if (/article|item|#/.test(key))       map.item       = it.x;
+    if (/supplier|ref/.test(key))         map.supplierRef= it.x;
+    if (/brand/.test(key))                map.brand      = it.x;
+    if (/desc|article desc/.test(key))    map.desc       = it.x;
+    if (/barcode|bar code/.test(key))     map.barcode    = it.x;
+    if (/qty|quantity/.test(key))         map.qty        = it.x;
+    if (/uom|unit/.test(key))             map.uom        = it.x;
+    if (/gross|total value|net/.test(key))map.totalValue = it.x;
+  }
+  return map;
+}
+
+// Extract a data row using column X positions
+function extractRowByColumns(row, colMap, lpoNum, totalGross, fourDigit) {
+  // If no column map, fall back to positional
+  const getText = (targetX, tolerance=40) => {
+    const candidates = row.filter(it => Math.abs(it.x - targetX) < tolerance);
+    return candidates.map(it=>it.str.trim()).join(' ').trim();
+  };
+
+  // Find barcode (8-14 digit number anywhere in row)
+  let barcode = '';
+  for (const it of row) {
+    if (/^\d{8,14}$/.test(it.str.trim())) { barcode=it.str.trim(); break; }
+  }
+  if (!barcode) return null;
+
+  // Use column positions if available
+  const supplierRef = colMap.supplierRef ? getText(colMap.supplierRef) : '';
+  const description = colMap.desc ? getText(colMap.desc, 60) : '';
+  const qty = colMap.qty ? getText(colMap.qty, 30).match(/\d[\d.]*/)?.[0] || '' : '';
+  const uom = colMap.uom ? getText(colMap.uom, 30).match(/[A-Z]{2,5}/i)?.[0]?.toUpperCase() || '' : '';
+
+  // Fallback for qty/uom from text after barcode in row
+  const rowAfterBarcode = row.filter(it=>it.x > (row.find(r=>r.str===barcode)?.x||0)+30);
+  const qtyCand = rowAfterBarcode.find(it=>/^\d[\d.]*$/.test(it.str.trim()));
+  const uomCand = rowAfterBarcode.find(it=>/^(EA|PCS?|PCE|BOX|KG|LTR|NOS|SET|EACH|DZ|ROLL|CAN)$/i.test(it.str.trim()));
+
+  return {
+    lpoNumber:   lpoNum,
+    supplierRef: supplierRef || '',
+    description: description || row.filter(it=>/[A-Za-z]{3,}/.test(it.str)).map(it=>it.str).join(' ').trim().slice(0,80),
+    barcode,
+    qty:         qty || qtyCand?.str || '',
+    uom:         uom || uomCand?.str.toUpperCase() || '',
+    totalGross,
+    fourDigit,
+  };
+}
+
+// ── Main Run ──────────────────────────────────────────────────────────
+async function run() {
+  if (!pdfFiles.length) return;
+  document.getElementById('procBtn').disabled = true;
+  document.getElementById('resArea').classList.remove('show');
+  allResults = [];
+  log(`Starting extraction — ${pdfFiles.length} PDF${pdfFiles.length>1?'s':''}…`, 'lh');
+  prog(5);
+
+  for (let i=0; i<pdfFiles.length; i++) {
+    const f   = pdfFiles[i];
+    prog(Math.round(5 + ((i+1)/pdfFiles.length)*88));
+    log(`[${i+1}/${pdfFiles.length}] ${f.name}`, 'li');
+
+    try {
+      const pages  = await getPdfData(f);
+      const parsed = parseLpo(pages);
+      const status = parsed.items.length > 0 ? (parsed.lpoNum ? 'ok' : 'partial') : 'err';
+
+      allResults.push({ name:f.name, size:f.size, fileIdx:i, ...parsed, status });
+
+      if (status==='ok')
+        log(`  ✓ LPO ${parsed.lpoNum} — ${parsed.items.length} line item${parsed.items.length!==1?'s':''} — Branch ${parsed.fourDigit}`, 'lok');
+      else if (status==='partial')
+        log(`  ⚠ ${f.name} — ${parsed.items.length} items found, LPO number not detected`, 'lw');
+      else
+        log(`  ✗ ${f.name} — no line items found. Check if PDF is text-based (not scanned image)`, 'le');
+    } catch(e) {
+      allResults.push({ name:f.name, size:f.size, fileIdx:i, lpoNum:'', fourDigit:'', totalGross:'', items:[], status:'err', error:e.message });
+      log(`  ✗ ${f.name} — ${e.message}`, 'le');
+    }
+  }
+
+  prog(100);
+  const total = allResults.reduce((s,r)=>s+r.items.length,0);
+  log(`Complete — ${total} line items from ${allResults.length} PDF${allResults.length!==1?'s':''}`, 'lh');
+  document.getElementById('procBtn').disabled = false;
+  renderResults();
+}
+
+// ── Render Results ────────────────────────────────────────────────────
+function renderResults() {
+  document.getElementById('resArea').classList.add('show');
+  renderStats(); renderList();
+}
+function renderStats() {
+  const ok      = allResults.filter(r=>r.status==='ok').length;
+  const partial = allResults.filter(r=>r.status==='partial').length;
+  const err     = allResults.filter(r=>r.status==='err').length;
+  const total   = allResults.reduce((s,r)=>s+r.items.length,0);
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat ${activeFilter==='all'?'active-all':''}" onclick="setFilter('all')">
+      <span class="sv b">${allResults.length}</span><span class="stat-hint">TOTAL PDFS</span>
+    </div>
+    <div class="stat" style="cursor:default">
+      <span class="sv g">${total}</span><span class="stat-hint">LINE ITEMS</span>
+    </div>
+    <div class="stat ${activeFilter==='ok'?'active-ok':''}" onclick="setFilter('ok')">
+      <span class="sv g">${ok}</span><span class="stat-hint">FULLY EXTRACTED</span>
+    </div>
+    <div class="stat ${activeFilter==='partial'?'active-partial':''}" onclick="setFilter('partial')">
+      <span class="sv y">${partial}</span><span class="stat-hint">PARTIAL</span>
+    </div>
+    <div class="stat ${activeFilter==='err'?'active-err':''}" onclick="setFilter('err')">
+      <span class="sv r">${err}</span><span class="stat-hint">FAILED</span>
+    </div>`;
+  document.getElementById('totalRows').textContent = total;
+  document.getElementById('totalPdfs').textContent = allResults.length;
+}
+function setFilter(f){ activeFilter=f; renderStats(); renderList(); }
+
+function renderList() {
+  const filtered = activeFilter==='all' ? allResults : allResults.filter(r=>r.status===activeFilter);
+  document.getElementById('resItems').innerHTML = filtered.map(r => {
+    const ridx = allResults.indexOf(r);
+    const badge = r.status==='ok'
+      ? `<span class="pbadge ok">✓ ${r.items.length} item${r.items.length!==1?'s':''}</span>`
+      : r.status==='partial'
+      ? `<span class="pbadge partial">⚠ ${r.items.length} item${r.items.length!==1?'s':''}</span>`
+      : `<span class="pbadge err">✗ No items</span>`;
+
+    const tableRows = r.items.map((it,iidx) => `
+      <tr>
+        <td class="td-lpo" contenteditable="true" oninput="allResults[${ridx}].items[${iidx}].lpoNumber=this.textContent.trim()">${it.lpoNumber||''}</td>
+        <td contenteditable="true" oninput="allResults[${ridx}].items[${iidx}].supplierRef=this.textContent.trim()">${it.supplierRef||'<span class="td-empty">—</span>'}</td>
+        <td contenteditable="true" style="min-width:180px;white-space:normal" oninput="allResults[${ridx}].items[${iidx}].description=this.textContent.trim()">${it.description||'<span class="td-empty">—</span>'}</td>
+        <td contenteditable="true" oninput="allResults[${ridx}].items[${iidx}].barcode=this.textContent.trim()">${it.barcode||''}</td>
+        <td class="td-r" contenteditable="true" oninput="allResults[${ridx}].items[${iidx}].qty=this.textContent.trim()">${it.qty||''}</td>
+        <td contenteditable="true" oninput="allResults[${ridx}].items[${iidx}].uom=this.textContent.trim()">${it.uom||''}</td>
+        <td class="td-r" contenteditable="true" oninput="allResults[${ridx}].items[${iidx}].totalGross=this.textContent.trim()">${it.totalGross||''}</td>
+        <td class="td-4d" contenteditable="true" oninput="allResults[${ridx}].items[${iidx}].fourDigit=this.textContent.trim()">${it.fourDigit||''}</td>
+      </tr>`).join('');
+
+    return `
+      <div class="pdf-block ${r.status}">
+        <div class="pdf-block-head">
+          <div class="pdf-block-name" title="${r.name}">📄 ${r.name}</div>
+          ${badge}
+          ${r.lpoNum     ? `<span class="chip">LPO <strong>${r.lpoNum}</strong></span>` : ''}
+          ${r.fourDigit  ? `<span class="chip">Branch <strong style="color:var(--yellow)">${r.fourDigit}</strong></span>` : ''}
+          ${r.totalGross ? `<span class="chip">Gross <strong>${r.totalGross}</strong></span>` : ''}
+          <span class="chip">${(r.size/1024).toFixed(1)} KB</span>
+          <button class="vb" onclick="previewPdf(${r.fileIdx})">👁 Preview PDF</button>
+        </div>
+        <div class="li-table-wrap">
+          <div class="li-table-scroll">
+            <table class="li-table">
+              <thead><tr>
+                <th>A · LPO Number</th>
+                <th>B · Supplier Ref</th>
+                <th>C · Article Description</th>
+                <th>D · Barcode</th>
+                <th style="text-align:right">E · Qty</th>
+                <th>F · UOM</th>
+                <th style="text-align:right">G · Total Gross</th>
+                <th>H · Branch (4-digit)</th>
+              </tr></thead>
+              <tbody>
+                ${r.items.length > 0 ? tableRows : `<tr><td colspan="8" style="text-align:center;color:var(--muted);font-style:italic;padding:18px 12px">${r.error?'Error: '+r.error:'No line items found — click Preview PDF to check the document'}</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <div class="table-footer">
+            <span class="table-footer-txt">
+              <strong>${r.items.length}</strong> row${r.items.length!==1?'s':''}
+              ${r.items.length > 5 ? ` · <span style="color:var(--accent)">scroll to see all</span>` : ''}
+            </span>
+            ${r.items.length > 5 ? `<span class="scroll-hint"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M3 9l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> ${r.items.length - 5} more rows below</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Export Excel ──────────────────────────────────────────────────────
+function exportExcel() {
+  const btn=document.getElementById('xlBtn');
+  btn.textContent='⏳ Generating…'; btn.disabled=true;
+  try {
+    const rows=[];
+    allResults.forEach(r => {
+      if (r.items.length > 0) {
+        r.items.forEach(it => rows.push({
+          'LPO Number':         it.lpoNumber  || r.lpoNum    || '',
+          'Supplier Reference': it.supplierRef || '',
+          'Article Description':it.description || '',
+          'Barcode':            it.barcode      || '',
+          'Quantity':           it.qty          || '',
+          'UOM':                it.uom          || '',
+          'Total Gross':        it.totalGross   || r.totalGross|| '',
+          'Four Digit Number':  it.fourDigit    || r.fourDigit || '',
+        }));
+      } else {
+        rows.push({
+          'LPO Number':         r.lpoNum    || '',
+          'Supplier Reference': '',
+          'Article Description': r.error ? 'ERROR: '+r.error : 'No items extracted',
+          'Barcode':            '',
+          'Quantity':           '',
+          'UOM':                '',
+          'Total Gross':        r.totalGross|| '',
+          'Four Digit Number':  r.fourDigit || '',
+        });
+      }
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:14},{wch:18},{wch:32},{wch:16},{wch:10},{wch:7},{wch:13},{wch:22}];
+    ws['!freeze'] = {xSplit:0,ySplit:1};
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'LPO Data');
+
+    // Summary sheet
+    const ws2 = XLSX.utils.aoa_to_sheet([
+      ['LPO Data Extractor — Export'],['Generated:',new Date().toLocaleString()],[''],
+      ['Total PDFs:',allResults.length],
+      ['Total Line Items:',rows.length],
+      ['OK:',allResults.filter(r=>r.status==='ok').length],
+      ['Partial:',allResults.filter(r=>r.status==='partial').length],
+      ['Failed:',allResults.filter(r=>r.status==='err').length],[''],
+      ['File','LPO #','Items','Status'],
+      ...allResults.map(r=>[r.name, r.lpoNum||'—', r.items.length, r.status.toUpperCase()]),
+    ]);
+    ws2['!cols']=[{wch:36},{wch:14},{wch:8},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+
+    const ts=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, `LPO_Data_${ts}.xlsx`);
+    log(`✓ Exported ${rows.length} rows → LPO_Data_${ts}.xlsx`, 'lok');
+  } catch(e) {
+    alert('Export failed: '+e.message); log('Export error: '+e.message,'le');
+  } finally { btn.textContent='⬇ Export to Excel'; btn.disabled=false; }
+}
+</script>
+</body>
+</html>
